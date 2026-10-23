@@ -1,0 +1,34 @@
+name: 당첨번호 자동 업데이트
+
+on:
+  schedule:
+    # 시간은 UTC 기준입니다. 한국시간 = UTC + 9
+    - cron: "40 12 * * 6"   # 토요일 21:40 (추첨 직후)
+    - cron: "40 14 * * 6"   # 토요일 23:40 (첫 시도에 결과가 없었을 때 재시도)
+    - cron: "0 1 * * 0"     # 일요일 10:00 (한 번 더 확인)
+  workflow_dispatch: {}     # Actions 탭에서 "Run workflow" 버튼으로 바로 실행
+
+permissions:
+  contents: write
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: 새 회차 가져오기
+        run: python scripts/update.py
+      - name: 바뀐 내용이 있으면 저장
+        run: |
+          if git diff --quiet data.json; then
+            echo "새 회차 없음"
+          else
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git add data.json
+            git commit -m "당첨번호 업데이트: $(python -c 'import json;print(json.load(open("data.json"))[-1][0])')회"
+            git push
+          fi
