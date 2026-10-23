@@ -1188,15 +1188,20 @@ $('#peopleTbl').onclick=e=>{const r=e.target.closest('tr[data-uid]');if(!r)retur
 $('#peopleQ').oninput=()=>{if(people)drawPeople();};
 $('#peopleReload').onclick=()=>loadPeople(true);
 if(SB_ON)syncShared();
-/* 실시간 접속자 수 (Supabase Realtime 접속 표시) */
-(function startPresence(){
+/* 실시간 접속자 수 (Supabase Realtime 접속 표시) — 비밀 열쇠가 아니라 공개 uid(열쇠 해시 앞 8자리)로 셈 */
+let presClient=null,presCh=null;
+async function startPresence(){
   if(!SB_ON||!window.supabase||!supabase.createClient)return;
-  try{const c=supabase.createClient(SB.url,SB.key);
-    const ch=c.channel('lottolab-online',{config:{presence:{key:myKey}}});
+  try{
+    presClient=presClient||supabase.createClient(SB.url,SB.key);
+    if(presCh){try{await presClient.removeChannel(presCh);}catch(e){}presCh=null;}
+    const uid=await myUidP;if(!uid)return;
+    const ch=presClient.channel('lottolab-online',{config:{presence:{key:uid}}});presCh=ch;
     ch.on('presence',{event:'sync'},()=>{const n=Object.keys(ch.presenceState()).length;const el=$('#online');el.hidden=n<1;el.innerHTML=`<span class="dot"></span>지금 ${n}명 접속 중`;})
       .subscribe(async s=>{if(s==='SUBSCRIBED'){try{await ch.track({at:Date.now()});}catch(e){}}});
   }catch(e){console.warn('접속자 수 표시 실패',e);}
-})();
+}
+startPresence();
 
 
 
@@ -1314,7 +1319,7 @@ async function redeemCode(raw){
     if(key===myKey){linkMsg='이 기기에서 만든 코드예요. 다른 기기에서 넣어 주세요.';renderLink();return;}
     const oldKey=myKey,local=stateData();
     if(Date.now()<closeAt(NEXT).getTime())for(let slot=0;slot<5;slot++){try{await sbRpc('delete_pick',{p_key:oldKey,p_round:NEXT,p_slot:slot});}catch(e){}}
-    myKey=key;_set('key',key);myUidP=uidOf(key);myUid=await myUidP;
+    myKey=key;_set('key',key);myUidP=uidOf(key);myUid=await myUidP;startPresence();
     linked=true;_set('linked',true);
     const r=await sbRpc('get_state',{p_key:key});
     stateAt=r&&r.updated_at||null;
