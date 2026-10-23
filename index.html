@@ -187,6 +187,12 @@ a.btn{text-decoration:none;display:inline-block}
 .own-row:last-child{border-bottom:0}
 .own-row .btn{flex:none;white-space:nowrap}
 .own-row .own-l{display:flex;flex-wrap:wrap;align-items:center;gap:6px 8px;min-width:0}
+.link-code{display:flex;gap:16px;align-items:center;flex-wrap:wrap}
+.qr{width:120px;height:120px;border-radius:10px;background:#fff;padding:6px;display:grid;place-items:center;flex:none}
+.qr svg{width:100%;height:100%;display:block}
+.code-big{font-family:var(--f-num);font-size:28px;font-weight:600;letter-spacing:.12em}
+.ok-box{background:var(--good-soft);color:var(--good);border-radius:8px;padding:10px 12px;font-size:14px}
+.ok-box b{color:var(--ink)}
 .err{color:var(--slip-ink);background:var(--slip-soft);border-radius:8px;padding:10px 12px;font-size:14px}
 .empty{color:var(--muted);font-size:14px;padding:18px 0;text-align:center}
 .disclaim{font-size:12.5px;color:var(--muted);border-left:3px solid var(--slip);padding:4px 0 4px 12px;max-width:80ch}
@@ -197,6 +203,7 @@ footer{color:var(--faint);font-size:12.5px;padding-block:0 30px}
 </style>
 <style>body{margin:0}[hidden]{display:none!important}img{max-width:100%}</style>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4"></script>
+<script src="https://cdn.jsdelivr.net/npm/qrcode-generator@1.4.4"></script>
 </head>
 <body>
 
@@ -431,6 +438,13 @@ footer{color:var(--faint);font-size:12.5px;padding-block:0 30px}
 
 <!-- ============ DRAWS ============ -->
 <section class="wrap" data-view="hist" hidden>
+  <div class="panel stack" id="linkPanel">
+    <div>
+      <h2>다른 기기 연결</h2>
+      <p class="lead">휴대폰과 PC에서 같은 내 번호·가진 번호·히스토리·닉네임을 보려면 기기를 연결하세요.</p>
+    </div>
+    <div id="linkBox"></div>
+  </div>
   <div class="panel stack" id="nickPanel">
     <div>
       <h2>닉네임으로 공유</h2>
@@ -870,7 +884,7 @@ function generate(){
   if(!res.length){msg.innerHTML=`<div class="err">조건을 모두 만족하는 조합을 찾지 못했어요. 번호대 개수, 합계 범위, 배수 조건 중 하나를 넓혀 보세요.</div>`;return;}
   if(res.length<rem)msg.innerHTML=`<div class="err">조건이 좁아서 ${res.length}게임만 찾았어요.</div>`;
   freshKeys=new Set(res.map(a=>a.join(',')));
-  const used=new Set(curIdx().map(i=>saved[i].slot));const free=[0,1,2,3,4].filter(x=>!used.has(x));const filled=new Set(free.slice(0,res.length));saved=saved.filter(x=>!(x.r===LAST.no&&filled.has(x.slot)));res.forEach((a,j)=>saved.push({n:a,r:NEXT,slot:free[j]}));store.set('saved',saved);renderSaved();
+  const used=new Set(curIdx().map(i=>saved[i].slot));const free=[0,1,2,3,4].filter(x=>!used.has(x));const filled=new Set(free.slice(0,res.length));saved=saved.filter(x=>!(x.r===LAST.no&&filled.has(x.slot)));res.forEach((a,j)=>saved.push({n:a,r:NEXT,slot:free[j],t:Date.now()}));store.set('saved',saved);renderSaved();
 }
 $('#genBtn').onclick=generate;
 
@@ -908,7 +922,7 @@ function renderSaved(){
   const dr=e.target.closest('[data-draw]');if(dr){$('#drawQ').value=dr.dataset.draw;showOne();$('#drawOne').scrollIntoView({behavior:'smooth',block:'center'});return;}
   const c=e.target.closest('[data-copy]');if(c){copyText(c.dataset.copy,c);return;}
   const s=e.target.closest('[data-save]');if(s){const a=s.dataset.save.split(',').map(Number);if(!saved.some(x=>x.r===LAST.no+1&&x.n.join()===a.join())){saved.unshift({n:a,r:LAST.no+1});store.set('saved',saved);renderSaved();}s.textContent='저장됨';s.disabled=true;return;}
-  const rd=e.target.closest('[data-redo]');if(rd){const s=saved[+rd.dataset.redo];if(s){saved=saved.filter(x=>!(x.r===NEXT&&x.slot===s.slot));s.r=NEXT;freshKeys=new Set([s.n.join(',')]);store.set('saved',saved);renderSaved();}return;}
+  const rd=e.target.closest('[data-redo]');if(rd){const s=saved[+rd.dataset.redo];if(s){saved=saved.filter(x=>!(x.r===NEXT&&x.slot===s.slot));s.r=NEXT;s.t=Date.now();freshKeys=new Set([s.n.join(',')]);store.set('saved',saved);renderSaved();}return;}
   const d=e.target.closest('[data-del]');if(d){const s=saved[+d.dataset.del];if(s){saved=saved.filter(x=>x!==s&&!(s.r===NEXT&&s.slot!=null&&x.r===LAST.no&&x.slot===s.slot));store.set('saved',saved);renderSaved();}}
 });
 function copyText(t,btn){const done=()=>{const o=btn.textContent;btn.textContent='복사됨';setTimeout(()=>btn.textContent=o,1200);};
@@ -991,9 +1005,10 @@ const SB_ON=!!(SB.url&&SB.key);
 const sbHead={apikey:SB.key,'Content-Type':'application/json'}; // publishable·anon 키 모두 apikey 헤더로만 보냄
 async function sbGet(q){const r=await fetch(`${SB.url}/rest/v1/${q}`,{headers:sbHead});if(!r.ok)throw new Error('목록을 불러오지 못했어요');return r.json();}
 async function sbRpc(fn,body){const r=await fetch(`${SB.url}/rest/v1/rpc/${fn}`,{method:'POST',headers:sbHead,body:JSON.stringify(body)});const txt=await r.text();let j=null;try{j=txt?JSON.parse(txt):null;}catch(e){}if(!r.ok)throw new Error((j&&j.message)||'서버에 저장하지 못했어요');return j;}
-const myKey=(()=>{let k=store.get('key','');if(!/^[A-Za-z0-9_-]{16,64}$/.test(k)){const a=new Uint8Array(24);crypto.getRandomValues(a);k=Array.from(a,b=>'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_'[b%64]).join('');store.set('key',k);}return k;})();
+let myKey=(()=>{let k=store.get('key','');if(!/^[A-Za-z0-9_-]{16,64}$/.test(k)){const a=new Uint8Array(24);crypto.getRandomValues(a);k=Array.from(a,b=>'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_'[b%64]).join('');store.set('key',k);}return k;})();
 let nick=store.get('nick','');let syncState='';
-const myUidP=(async()=>{try{const h=await crypto.subtle.digest('SHA-256',new TextEncoder().encode(myKey));return Array.from(new Uint8Array(h),b=>b.toString(16).padStart(2,'0')).join('').slice(0,8);}catch(e){return '';}})();
+const uidOf=async k=>{try{const h=await crypto.subtle.digest('SHA-256',new TextEncoder().encode(k));return Array.from(new Uint8Array(h),b=>b.toString(16).padStart(2,'0')).join('').slice(0,8);}catch(e){return '';}};
+let myUidP=uidOf(myKey);
 let myUid='';myUidP.then(u=>myUid=u);
 const closeAt=r=>new Date(Date.parse('2002-12-07T20:00:00+09:00')+(r-1)*7*864e5);
 function renderNick(){
@@ -1013,7 +1028,9 @@ async function setNick(){
   catch(e){err.innerHTML=`<span style="color:var(--slip-ink)">${esc(e.message)}</span>`;}
 }
 let syncTimer=null;
-const _set=store.set;store.set=(k,v)=>{_set(k,v);if(k==='saved'){clearTimeout(syncTimer);syncTimer=setTimeout(syncShared,600);}};
+const _set=store.set;let pushTimer=null;
+store.set=(k,v)=>{_set(k,v);if(k==='saved'){clearTimeout(syncTimer);syncTimer=setTimeout(syncShared,600);}
+  if(['saved','owned','history','nick'].includes(k)&&typeof linked!=='undefined'&&linked){clearTimeout(pushTimer);pushTimer=setTimeout(()=>pushState().catch(()=>{}),800);}};
 async function syncShared(){
   if(!SB_ON)return;
   if(Date.now()>=closeAt(NEXT).getTime()){syncState=`${NEXT}회 판매가 마감돼서 지금은 바꾼 번호가 공유되지 않아요.`;renderNick();return;}
@@ -1124,6 +1141,98 @@ function addOwned(){
 $('#ownAdd').onclick=addOwned;$('#ownIn').onkeydown=e=>{if(e.key==='Enter')addOwned();};
 $('#ownOut').onclick=e=>{const b=e.target.closest('[data-owndel]');if(!b)return;owned.splice(+b.dataset.owndel,1);store.set('owned',owned);renderOwned();};
 
+
+/* ---------- 다른 기기 연결 (같은 열쇠를 나눠 쓰고, 기록은 서버 user_state 에 비공개 보관) ---------- */
+var linked=store.get('linked',false);let stateAt=store.get('stateAt',null),linkMode='show',linkMsg='',codeInfo=null,codeTimer=null,linkPrefill='';
+const stateData=()=>({v:1,saved,owned,history:hist,nick});
+function applyState(d){
+  if(!d)return;
+  const hk=new Set(hist.map(h=>h.r+'|'+(h.slot??'')+'|'+h.n.join(',')));
+  (d.history||[]).forEach(h=>{const k=h.r+'|'+(h.slot??'')+'|'+h.n.join(',');if(!hk.has(k)){hk.add(k);hist.push(h);}});
+  (d.saved||[]).filter(s=>s.r<=LAST.no).forEach(s=>{const k=s.r+'|'+(s.slot??'')+'|'+s.n.join(',');if(!hk.has(k)){hk.add(k);hist.push({n:s.n.slice(),r:s.r,slot:s.slot});}});
+  saved=(d.saved||[]).filter(s=>s.r>=LAST.no);owned=(d.owned||[]).filter(o=>o.r>=LAST.no);
+  if(typeof d.nick==='string')nick=d.nick;
+  _set('saved',saved);_set('owned',owned);_set('history',hist);_set('nick',nick);
+  renderSaved();renderOwned();renderHist();renderNick();people=null;syncShared();
+}
+function mergeState(a,b){ // a: 서버(연결 대상), b: 이 기기
+  const sm=new Map();[...(a.saved||[]),...(b.saved||[])].forEach(s=>{const k=s.r+'|'+(s.slot??('x'+s.n.join(',')));const o=sm.get(k);if(!o||(s.t||0)>(o.t||0))sm.set(k,s);});
+  const om=new Map();[...(a.owned||[]),...(b.owned||[])].forEach(o=>om.set(o.r+'|'+o.n.join(','),o));
+  const hm=new Map();[...(a.history||[]),...(b.history||[])].forEach(h=>hm.set(h.r+'|'+(h.slot??'')+'|'+h.n.join(','),h));
+  return {v:1,saved:[...sm.values()],owned:[...om.values()],history:[...hm.values()],nick:a.nick||b.nick||''};
+}
+async function pullState(){
+  const r=await sbRpc('get_state',{p_key:myKey});
+  if(r&&r.updated_at&&r.updated_at!==stateAt){applyState(r.data);stateAt=r.updated_at;_set('stateAt',stateAt);}
+  return r;
+}
+async function pushState(){
+  if(!SB_ON||!linked)return;
+  let at=await sbRpc('put_state',{p_key:myKey,p_data:stateData(),p_prev:stateAt});
+  if(at==null){await pullState();linkMsg='다른 기기에서 바뀐 내용을 불러왔어요.';renderLink();return;}
+  stateAt=at;_set('stateAt',at);renderLink();
+}
+const fmtCode=c=>c.slice(0,4)+' '+c.slice(4);
+function renderLink(){
+  const box=$('#linkBox');if(!box)return;
+  if(!SB_ON){box.innerHTML='<div class="note">기기 연결은 아직 준비 중이에요.</div>';return;}
+  let body='';
+  if(linkMode==='show'){
+    const left=codeInfo?Math.max(0,Math.round((Date.parse(codeInfo.expires_at)-Date.now())/60000)):0;
+    if(codeInfo&&left>0){
+      let qr='';try{if(window.qrcode){const q=qrcode(0,'M');q.addData(location.origin+location.pathname+'#link='+codeInfo.code);q.make();qr=`<div class="qr" aria-label="연결 QR 코드">${q.createSvgTag({cellSize:4,margin:0,scalable:true})}</div>`;}}catch(e){}
+      body=`<div class="link-code">${qr}<div class="stack" style="gap:6px"><span class="mini">연결 코드 · ${left}분 동안 쓸 수 있어요</span><span class="code-big">${fmtCode(codeInfo.code)}</span><span class="row" style="gap:6px"><button class="btn ghost sm" id="codeCopy">코드 복사</button><button class="btn ghost sm" id="codeNew">새 코드</button></span></div></div>
+      <div class="note">다른 기기에서 ${qr?'QR 코드를 카메라로 찍거나, ':''}사이트의 <b>히스토리 → 다른 기기 연결 → 코드 입력하기</b>에 위 8자리를 넣으세요. 코드는 남에게 보여 주지 마세요.</div>`;
+    }else body=`<button class="btn" id="codeMake">연결 코드 만들기</button>`;
+  }else{
+    body=`<div class="row"><input type="text" id="linkIn" maxlength="12" autocapitalize="characters" autocomplete="off" placeholder="예: K7M2 9QXA" aria-label="연결 코드" value="${esc(linkPrefill)}" style="flex:1 1 160px;min-width:0;font-family:var(--f-num);font-size:18px;letter-spacing:.1em"><button class="btn" id="linkGo">연결</button></div>
+      ${linkPrefill?'<div class="mini">QR 코드로 열었어요. <b>연결</b>을 누르면 원래 기기의 기록과 합쳐져요.</div>':'<div class="mini">이 기기에 있던 번호와 기록은 버리지 않고 연결된 기록과 합쳐요.</div>'}`;
+  }
+  const when=stateAt?new Date(stateAt).toLocaleTimeString('ko-KR',{hour:'2-digit',minute:'2-digit'}):'';
+  box.innerHTML=`<div class="row"><div class="seg"><button type="button" data-lm="show" aria-pressed="${linkMode==='show'}">이 기기 코드 보기</button><button type="button" data-lm="enter" aria-pressed="${linkMode==='enter'}">코드 입력하기</button></div></div>
+    ${body}${linkMsg?`<div class="${/못|않|틀|지났/.test(linkMsg)?'err':'ok-box'}">${linkMsg}</div>`:''}
+    <div class="mini">${linked?`이 기기는 연결돼 있어요${when?' · 마지막 맞춤 '+when:''}`:'아직 연결된 기기가 없어요.'}</div>`;
+  box.querySelectorAll('[data-lm]').forEach(b=>b.onclick=()=>{linkMode=b.dataset.lm;linkMsg='';renderLink();});
+  const mk=$('#codeMake'),nw=$('#codeNew'),cp=$('#codeCopy'),go=$('#linkGo'),li=$('#linkIn');
+  if(mk)mk.onclick=makeCode;if(nw)nw.onclick=makeCode;if(cp)cp.onclick=e=>copyText(codeInfo.code,e.currentTarget);
+  if(go)go.onclick=()=>redeemCode(li.value);if(li)li.onkeydown=e=>{if(e.key==='Enter')redeemCode(li.value);};
+}
+async function makeCode(){
+  linkMsg='';
+  try{
+    if(!linked){linked=true;_set('linked',true);}
+    await pushState();
+    codeInfo=await sbRpc('create_link_code',{p_key:myKey});
+    clearInterval(codeTimer);codeTimer=setInterval(()=>{if(!$('[data-view="hist"]').hidden)renderLink();if(codeInfo&&Date.parse(codeInfo.expires_at)<Date.now()){clearInterval(codeTimer);codeInfo=null;renderLink();}},30000);
+  }catch(e){linkMsg=`코드를 만들지 못했어요: ${esc(e.message)}`;}
+  renderLink();
+}
+async function redeemCode(raw){
+  const code=String(raw||'').replace(/[^A-Za-z0-9]/g,'').toUpperCase();
+  if(code.length!==8){linkMsg='연결 코드 8자리를 넣어 주세요.';renderLink();return;}
+  linkMsg='연결하는 중…';renderLink();
+  try{
+    const key=await sbRpc('redeem_link_code',{p_code:code});
+    if(key===myKey){linkMsg='이 기기에서 만든 코드예요. 다른 기기에서 넣어 주세요.';renderLink();return;}
+    const oldKey=myKey,local=stateData();
+    if(Date.now()<closeAt(NEXT).getTime())for(let slot=0;slot<5;slot++){try{await sbRpc('delete_pick',{p_key:oldKey,p_round:NEXT,p_slot:slot});}catch(e){}}
+    myKey=key;_set('key',key);myUidP=uidOf(key);myUid=await myUidP;
+    linked=true;_set('linked',true);
+    const r=await sbRpc('get_state',{p_key:key});
+    stateAt=r&&r.updated_at||null;
+    const merged=mergeState((r&&r.data)||{},local);
+    applyState(merged);await pushState();
+    const nS=saved.filter(s=>s.r===NEXT).length,nO=owned.length,nH=new Set(hist.map(h=>h.r)).size;
+    linkMsg=`연결됐어요! <b>내 번호 ${nS}게임</b>, <b>가진 번호 ${nO}게임</b>, <b>히스토리 ${nH}개 회차</b>${nick?`, 닉네임 <b>${esc(nick)}</b>`:''}을 맞췄어요.`;
+    linkPrefill='';try{history.replaceState(null,'','#hist');}catch(e){}
+  }catch(e){linkMsg=esc(e.message);}
+  renderLink();
+}
+if(SB_ON&&linked)pullState().then(r=>{if(!r||!r.updated_at)return pushState();}).catch(()=>{});
+document.addEventListener('visibilitychange',()=>{if(!document.hidden&&SB_ON&&linked)pullState().catch(()=>{});});
+const linkFromHash=()=>{const m=(location.hash||'').match(/^#link=([A-Za-z0-9-]+)/);if(m){linkMode='enter';linkMsg='';linkPrefill=fmtCode(m[1].replace(/-/g,'').toUpperCase());setTimeout(()=>{openTab('hist');renderLink();},0);}};
+linkFromHash();addEventListener('hashchange',linkFromHash);
+
 /* ---------- 당첨 축하 (최신 회차 내 번호가 1~5등이면 한 번만) ---------- */
 function celebrateWins(only){
   const mine=saved.filter(s=>s.r===LAST.no).map(s=>({slot:s.slot,n:s.n,k:rankOf(s.n,LAST)}));
@@ -1198,9 +1307,9 @@ function openTab(t){if(!TABS.includes(t))t='rank';
     if(t==='pattern'){renderRules();renderMult();renderAllMult();renderDM();renderDQ();renderDec();renderCombos();renderDist();}
     if(t==='pick'){fillComboSel();renderModes();paintSlip();renderOddSel();renderSaved();computeCoverage();}
     if(t==='draws'){renderChk();renderDraws();}
-    if(t==='hist'){renderOwned();renderHist();renderNick();}
+    if(t==='hist'){renderLink();renderOwned();renderHist();renderNick();}
     if(t==='people')loadPeople();
-  } else if(t==='pattern')renderRules(); else if(t==='pick')computeCoverage(); else if(t==='people')loadPeople(); else if(t==='hist'){renderOwned();renderNick();}
+  } else if(t==='pattern')renderRules(); else if(t==='pick')computeCoverage(); else if(t==='people')loadPeople(); else if(t==='hist'){renderLink();renderOwned();renderNick();}
   store.set('tab',t);}
 document.querySelector('nav.tabs').onclick=e=>{const b=e.target.closest('[data-tab]');if(b){openTab(b.dataset.tab);try{history.replaceState(null,'','#'+b.dataset.tab);}catch(err){}}};
 const h0=(location.hash||'').slice(1);openTab(TABS.includes(h0)?h0:store.get('tab','rank'));
