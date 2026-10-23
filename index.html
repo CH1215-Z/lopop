@@ -207,6 +207,10 @@ a.btn{text-decoration:none;display:inline-block}
 .code-big{font-family:var(--f-num);font-size:28px;font-weight:600;letter-spacing:.12em}
 .ok-box{background:var(--good-soft);color:var(--good);border-radius:8px;padding:10px 12px;font-size:14px}
 .ok-box b{color:var(--ink)}
+.nudge{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;background:#FFF4CF;border:1.5px solid #E8B21E;border-radius:var(--r);padding:14px 16px;color:#4A3A00;font-size:14px}
+.nudge .nudge-t{flex:1 1 260px;min-width:0}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]) .nudge{background:#3A3115;color:#F3E3A6}}
+:root[data-theme="dark"] .nudge{background:#3A3115;color:#F3E3A6}
 .err{color:var(--slip-ink);background:var(--slip-soft);border-radius:8px;padding:10px 12px;font-size:14px}
 .empty{color:var(--muted);font-size:14px;padding:18px 0;text-align:center}
 .disclaim{font-size:12.5px;color:var(--muted);border-left:3px solid var(--slip);padding:4px 0 4px 12px;max-width:80ch}
@@ -370,6 +374,10 @@ footer{color:var(--faint);font-size:12.5px;padding-block:0 30px}
 
 <!-- ============ PICK ============ -->
 <section class="wrap" data-view="pick" hidden>
+  <div class="nudge" id="saveNudge" hidden role="status">
+    <div class="nudge-t"><b>이제 번호 전체 저장을 눌러야 기록돼요.</b> 내 번호에 있는 번호는 연습장이라 이번 회차 히스토리·통계·당첨 확인에 들어가지 않아요. 지금 내 번호를 저장할까요?</div>
+    <div class="row" style="gap:6px;flex:none"><button class="btn" id="nudgeSave">저장하기</button><button class="btn ghost" id="nudgeLater">나중에</button></div>
+  </div>
   <div class="gen">
     <div class="panel">
       <div class="opt">
@@ -908,6 +916,8 @@ function generate(){
 }
 $('#genBtn').onclick=generate;
 $('#saveAll').onclick=saveAll;
+$('#nudgeSave').onclick=()=>{saveAll();$('#saveNudge').hidden=true;$('#confPanel').scrollIntoView({behavior:'smooth',block:'center'});};
+$('#nudgeLater').onclick=()=>{store.set('nudge',NEXT);$('#saveNudge').hidden=true;};
 
 const savedRaw=store.get('saved',[]).map(x=>Array.isArray(x)?{n:x,r:LAST.no+1}:x);
 let hist=store.get('history',[]);
@@ -937,7 +947,13 @@ function renderSaved(){
   renderConfirmed();
 }
 let editIdx=-1;
+function renderNudge(){
+  const el=$('#saveNudge');if(!el)return;
+  const show=Date.now()<closeAt(NEXT).getTime()&&curIdx().length>0&&!confirmed.some(c=>c.r===NEXT)&&store.get('nudge',0)!==NEXT;
+  el.hidden=!show;
+}
 function renderConfirmed(){
+  renderNudge();
   const open=Date.now()<closeAt(NEXT).getTime();
   const cn=confirmed.map((c,i)=>[c,i]).filter(([c])=>c.r===NEXT).sort((a,b)=>a[0].slot-b[0].slot);
   const cl=confirmed.map((c,i)=>[c,i]).filter(([c])=>c.r===LAST.no).sort((a,b)=>a[0].slot-b[0].slot);
