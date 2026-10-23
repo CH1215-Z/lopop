@@ -577,7 +577,7 @@ const seg=(el,items,val,on)=>{el.innerHTML=items.map(([v,l])=>`<button type="but
 $('#subline').innerHTML=`동행복권 로또 6/45 · 1회(${dateK(D[0].date)}) ~ ${LAST.no}회(${dateK(LAST.date)}) · 총 <span class="num">${fmt(N)}</span>회 분석`;
 $('#latestLab').textContent=`최신 ${LAST.no}회 당첨번호 · ${dateK(LAST.date)}`;
 $('#latestBalls').innerHTML=LAST.n.map(n=>ball(n)).join('')+'<span class="plus">+</span>'+ball(LAST.b);
-$('#foot').innerHTML=`데이터: 1회~${LAST.no}회 당첨번호(동행복권 공개 결과를 모은 GitHub smok95/lotto). 최신 회차는 동행복권 사이트에서 다시 확인하세요. 이론 확률은 가능한 조합 8,145,060개를 전부 따져서 구한 값입니다.`;
+$('#foot').innerHTML=`데이터: 1회~${LAST.no}회 당첨번호와 등수별 당첨 수(동행복권 공식 결과, 매주 토요일 추첨 뒤 자동 업데이트). 정확한 결과는 동행복권 사이트에서 다시 확인하세요. 이론 확률은 가능한 조합 8,145,060개를 전부 따져서 구한 값입니다.`;
 
 /* ---------- RANK ---------- */
 const rk={win:store.get('rkwin','all'),sort:'num',bonus:false};
