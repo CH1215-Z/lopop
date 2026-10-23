@@ -405,7 +405,7 @@ footer{color:var(--faint);font-size:12.5px;padding-block:0 30px}
           <div class="row" style="justify-content:space-between"><span class="mini" id="savedCount"></span><button class="btn ghost sm" id="clearSaved">추첨 끝난 번호 지우기</button></div>
         </div>
         <div class="row"><a class="btn" href="https://www.dhlottery.co.kr" target="_blank" rel="noopener">동행복권에서 구매하기</a><button class="btn ghost" id="copyGen">번호 전체 복사</button><button class="btn ghost" id="resetAll">초기화</button></div>
-        <div class="mini">한 회차에 5게임까지 뽑을 수 있어요. 뽑은 번호는 자동으로 내 번호에 들어가고, 삭제하면 그만큼 다시 뽑을 수 있어요. 추첨(<span id="nextDraw"></span>)이 끝나면 당첨 결과가 자동으로 표시돼요. 구매는 동행복권 사이트에 로그인한 뒤 번호를 직접 골라 주세요.</div>
+        <div class="mini">한 회차에 5게임까지 뽑을 수 있어요. 뽑은 번호는 자동으로 내 번호에 들어가고, 삭제하면 그만큼 다시 뽑을 수 있어요. 추첨(<span id="nextDraw"></span>)이 끝나면 당첨 결과가 자동으로 표시돼요. 구매는 동행복권 사이트에 로그인한 뒤 번호를 직접 골라 주세요. 내 번호는 사이트 전체 당첨 통계를 위해 익명으로 모여요.</div>
       </div>
 
       <p class="disclaim">어떤 방식으로 뽑아도 한 게임이 1등에 당첨될 확률은 똑같이 8,145,060분의 1이에요. 여기 있는 통계는 지난 결과를 설명할 뿐, 다음 결과를 예측하지 않아요. 조건은 원하는 스타일로 번호를 고르는 재미로 써 주세요.</p>
@@ -439,6 +439,7 @@ footer{color:var(--faint);font-size:12.5px;padding-block:0 30px}
       <h2>모두의 히스토리</h2>
       <p class="lead">닉네임으로 공유한 사람들의 번호와 당첨 결과예요. 닉네임을 누르면 그 사람의 회차별 기록이 보여요.</p>
     </div>
+    <div id="siteStats"></div>
     <div id="peopleMsg"></div>
     <div class="row"><input type="text" id="peopleQ" placeholder="닉네임 찾기" aria-label="닉네임 찾기" style="flex:1 1 200px;min-width:0"><button class="btn ghost" id="peopleReload">새로고침</button></div>
     <div class="tbl-wrap"><table id="peopleTbl"></table></div>
@@ -972,7 +973,7 @@ function renderNick(){
   box.innerHTML=`<div class="row"><input type="text" id="nickIn" maxlength="12" placeholder="닉네임 (1~12자)" aria-label="닉네임" value="${esc(nick)}" style="flex:1 1 200px;min-width:0"><button class="btn" id="nickSet">${nick?'닉네임 바꾸기':'공유 시작'}</button>${nick?'<button class="btn ghost" id="nickOff">공유 끄기</button>':''}</div>
   <div class="mini" id="nickErr">${nick?`<b>${esc(nick)}</b>(으)로 공유 중이에요. `:''}${syncState||(nick?'이번 회차 내 번호가 자동으로 공유돼요.':'닉네임은 언제든 바꿀 수 있고, 다른 사람과 같아도 괜찮아요.')}</div>`;
   $('#nickSet').onclick=setNick;$('#nickIn').onkeydown=e=>{if(e.key==='Enter')setNick();};
-  if(nick)$('#nickOff').onclick=()=>{nick='';store.set('nick','');syncState='';renderNick();};
+  if(nick)$('#nickOff').onclick=async()=>{try{await sbRpc('clear_nickname',{p_key:myKey});}catch(e){}nick='';store.set('nick','');syncState='';people=null;renderNick();};
 }
 const esc=s=>String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 async function setNick(){
@@ -985,7 +986,7 @@ async function setNick(){
 let syncTimer=null;
 const _set=store.set;store.set=(k,v)=>{_set(k,v);if(k==='saved'){clearTimeout(syncTimer);syncTimer=setTimeout(syncShared,600);}};
 async function syncShared(){
-  if(!SB_ON||!nick)return;
+  if(!SB_ON)return;
   if(Date.now()>=closeAt(NEXT).getTime()){syncState=`${NEXT}회 판매가 마감돼서 지금은 바꾼 번호가 공유되지 않아요.`;renderNick();return;}
   try{
     const uid=await myUidP;if(!uid)throw new Error('이 브라우저에서는 공유 기능을 쓸 수 없어요');
@@ -993,20 +994,34 @@ async function syncShared(){
     const sv={};server.forEach(p=>sv[p.slot]=p.numbers.join(','));
     const local={};saved.filter(s=>s.r===NEXT&&s.slot!=null).forEach(s=>local[s.slot]=s.n);
     for(let slot=0;slot<5;slot++){
-      if(local[slot]&&sv[slot]!==local[slot].join(','))await sbRpc('save_pick',{p_key:myKey,p_nickname:nick,p_round:NEXT,p_slot:slot,p_numbers:local[slot]});
+      if(local[slot]&&sv[slot]!==local[slot].join(','))await sbRpc('save_pick',{p_key:myKey,p_nickname:nick||'',p_round:NEXT,p_slot:slot,p_numbers:local[slot]});
       else if(!local[slot]&&sv[slot])await sbRpc('delete_pick',{p_key:myKey,p_round:NEXT,p_slot:slot});
     }
-    syncState=`${NEXT}회 내 번호 ${Object.keys(local).length}게임 공유됨 · ${new Date().toLocaleTimeString('ko-KR',{hour:'2-digit',minute:'2-digit'})}`;
+    syncState=`${NEXT}회 내 번호 ${Object.keys(local).length}게임 ${nick?'공유됨':'익명 통계에 반영됨'} · ${new Date().toLocaleTimeString('ko-KR',{hour:'2-digit',minute:'2-digit'})}`;
     people=null;
   }catch(e){syncState=`공유하지 못했어요: ${e.message}`;}
   if(!$('[data-view="hist"]').hidden)renderNick();
 }
 let people=null,personSel='';
+async function loadSiteStats(){
+  const el=$('#siteStats');
+  try{
+    const [a,b]=await Promise.all([sbRpc('round_stats',{p_round:LAST.no,p_win:LAST.n,p_bonus:LAST.b}),sbRpc('round_stats',{p_round:NEXT,p_win:[0],p_bonus:0})]);
+    const P=[0,1/TOTAL,6/TOTAL,228/TOTAL,11115/TOTAL,182780/TOTAL];
+    const lose=a.total-a.r1-a.r2-a.r3-a.r4-a.r5;
+    const cell=(k,v)=>`<div class="cell"><span class="k">${k}</span><span class="v${v&&k!=='낙첨'?' hl':''}">${fmt(v)}</span><span class="d">${k==='낙첨'?'':(e=>e<0.01?'기대 0.01게임 미만':'기대 '+e.toFixed(e<1?2:1)+'게임')(a.total*P[+k[0]])}</span></div>`;
+    el.innerHTML=`<div class="stack" style="gap:10px">
+      <div class="row" style="justify-content:space-between"><b>${LAST.no}회 · 이 사이트에서 뽑은 번호 ${fmt(a.total)}게임 (${fmt(a.people)}명)</b><span class="balls">${LAST.n.map(n=>ball(n,'xs')).join('')}<span class="plus">+</span>${ball(LAST.b,'xs')}</span></div>
+      ${a.total?`<div class="vs" style="grid-template-columns:repeat(auto-fit,minmax(min(100%,110px),1fr));gap:8px">${cell('1등',a.r1)}${cell('2등',a.r2)}${cell('3등',a.r3)}${cell('4등',a.r4)}${cell('5등',a.r5)}${cell('낙첨',lose)}</div>`:`<div class="note">${LAST.no}회에는 이 사이트에서 모인 번호가 없어요.</div>`}
+      <div class="mini">${NEXT}회는 지금까지 ${fmt(b.total)}게임(${fmt(b.people)}명)이 모였어요. 닉네임을 정하지 않은 번호도 익명으로 이 통계에 들어가요.</div>
+    </div>`;
+  }catch(e){el.innerHTML='';}
+}
 async function loadPeople(force){
   const msg=$('#peopleMsg');
   if(!SB_ON){msg.innerHTML=`<div class="note">공유 기능은 아직 준비 중이에요.</div>`;return;}
   if(people&&!force){drawPeople();return;}
-  msg.innerHTML=`<div class="mini">불러오는 중…</div>`;
+  msg.innerHTML=`<div class="mini">불러오는 중…</div>`;loadSiteStats();
   try{const rows=await sbGet(`shared_picks?select=uid,nickname,round,slot,numbers&order=round.desc,slot.asc&limit=10000`);
     people=rows.map(p=>({uid:p.uid,nick:p.nickname,r:p.round,slot:p.slot,n:p.numbers}));msg.innerHTML='';drawPeople();
   }catch(e){msg.innerHTML=`<div class="err">${esc(e.message)}. 잠시 뒤 새로고침해 주세요.</div>`;}
@@ -1028,7 +1043,7 @@ function showPerson(k,list){const done=list.filter(p=>D[p.r-1]);const rc=[0,0,0,
 $('#peopleTbl').onclick=e=>{const r=e.target.closest('tr[data-uid]');if(!r)return;personSel=r.dataset.uid;drawPeople();$('#personPanel').scrollIntoView({behavior:'smooth',block:'start'});};
 $('#peopleQ').oninput=()=>{if(people)drawPeople();};
 $('#peopleReload').onclick=()=>loadPeople(true);
-if(SB_ON&&nick)syncShared();
+if(SB_ON)syncShared();
 /* 실시간 접속자 수 (Supabase Realtime 접속 표시) */
 (function startPresence(){
   if(!SB_ON||!window.supabase||!supabase.createClient)return;
