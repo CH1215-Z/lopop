@@ -1090,7 +1090,7 @@ if(SB_ON)syncShared();
 let owned=store.get('owned',[]).filter(o=>o.r>=LAST.no);store.set('owned',owned);
 function ownStats(a){
   const x=maskOf(a);const P=v=>(v*100).toFixed(1)+'%';
-  const h=pastResults(a);const won=[1,2,3,4,5].filter(k=>h.r[k]).map(k=>`${k}등 ${h.r[k]}`).join('·')||'당첨 없음';
+  const h=pastResults(a);const won=[1,2,3,4,5].filter(k=>h.r[k]).map(k=>`${k}등 ${h.r[k]}회`).join(', ')||'당첨 없음';
   const odd=D.filter(d=>d.odd===x.odd).length/N;
   const dk=x.dc.join('-');const dec=D.filter(d=>d.dc.join('-')===dk).length/N;
   const lo=Math.floor(x.s/20)*20,hi=lo+19;const sum=D.filter(d=>d.s>=lo&&d.s<=hi).length/N;
