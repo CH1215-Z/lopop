@@ -190,10 +190,13 @@ a.btn{text-decoration:none;display:inline-block}
 .congrats button{margin-top:14px}
 @keyframes cg-in{from{transform:translateX(-50%) scale(.7);opacity:0}to{transform:translateX(-50%) scale(1);opacity:1}}
 .game.sub.win{background:linear-gradient(90deg,#FFF4CF,transparent);border-radius:8px}
-@media (prefers-color-scheme:dark){:root:not([data-theme="light"]) .game.sub.win{background:linear-gradient(90deg,rgba(232,178,30,.22),transparent)}}
-:root[data-theme="dark"] .game.sub.win{background:linear-gradient(90deg,rgba(232,178,30,.22),transparent)}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]) .game.sub.win,:root:not([data-theme="light"]) .own-row.own-win{background:linear-gradient(90deg,rgba(232,178,30,.22),transparent)}}
+:root[data-theme="dark"] .game.sub.win,:root[data-theme="dark"] .own-row.own-win{background:linear-gradient(90deg,rgba(232,178,30,.22),transparent)}
 .own-row{display:flex;align-items:center;gap:10px;justify-content:space-between;padding:9px 0;border-bottom:1px solid var(--line)}
 .own-row:last-child{border-bottom:0}
+.res-line{flex-basis:100%;display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap}
+.own-row.own-win{background:linear-gradient(90deg,#FFF4CF,transparent);border-radius:8px;padding-left:8px}
+.congrats .gl{white-space:nowrap;min-width:26px}
 .own-row .btn{flex:none;white-space:nowrap}
 .own-row .own-l{display:flex;flex-wrap:wrap;align-items:center;gap:6px 8px;min-width:0}
 #linkBox{display:flex;flex-direction:column;gap:14px}
@@ -480,7 +483,7 @@ footer{color:var(--faint);font-size:12.5px;padding-block:0 30px}
   <div class="panel stack">
     <div>
       <h2>내 번호 히스토리</h2>
-      <p class="lead">추첨일까지 내 번호에 들어 있던 번호가 회차별로 쌓여요. 내 번호에서 삭제하거나 초기화해도 여기 기록은 남아요.</p>
+      <p class="lead">저장된 번호가 추첨이 끝나면 회차별로 쌓여요. 저장된 번호에서 지우거나 초기화해도 여기 기록은 남아요.</p>
     </div>
     <div id="histSum"></div>
     <div id="histOut"></div>
@@ -939,11 +942,11 @@ function renderConfirmed(){
   const cn=confirmed.map((c,i)=>[c,i]).filter(([c])=>c.r===NEXT).sort((a,b)=>a[0].slot-b[0].slot);
   const cl=confirmed.map((c,i)=>[c,i]).filter(([c])=>c.r===LAST.no).sort((a,b)=>a[0].slot-b[0].slot);
   $('#confSub').textContent=`${NEXT}회 · ${cn.length}/${MAXC}게임`;
-  let html=cn.map(([c,i],p)=>`<div class="own-row"><span class="own-l"><span class="gl">${p+1}</span>${balls(c.n,'sm')}<span class="tag">${NEXT}회 미추첨</span></span>${open?`<button class="btn ghost sm" data-cdel="${i}">취소</button>`:''}</div>`).join('');
+  let html=cn.map(([c,i],p)=>`<div class="own-row"><span class="own-l"><span class="gl">${(c.slot??p)+1}</span>${balls(c.n,'sm')}<span class="tag">${NEXT}회 미추첨</span></span>${open?`<button class="btn ghost sm" data-cdel="${i}">취소</button>`:''}</div>`).join('');
   if(!cn.length)html=`<div class="empty" style="padding:6px 0">아직 저장한 번호가 없어요. 내 번호를 뽑고 <b>번호 전체 저장</b>을 누르세요.</div>`;
   if(cl.length){const d=LAST;
     html+=`<div class="mini" style="margin-top:12px;font-weight:600">${LAST.no}회 결과</div>`+cl.map(([c,i])=>{const k=rankOf(c.n,d),m=c.n.filter(x=>d.n.includes(x)).length;
-      return `<div class="own-row${k?' game sub win':''}" style="${k?'padding-left:8px;':''}"><span class="own-l"><span class="balls">${c.n.map(n=>`<span class="ball sm b${band(n)}"${d.n.includes(n)||(k===2&&n===d.b)?'':' style="opacity:.28"'}>${n}</span>`).join('')}</span>${k?`<span class="tag hot">${k}등 당첨</span>`:`<span class="tag">낙첨 · ${m}개 일치</span>`}</span><span class="row" style="gap:4px;flex:none">${open?`<button class="btn ghost sm" data-credo="${i}" title="이 번호를 ${NEXT}회 저장된 번호로 다시 넣기">다시하기</button>`:''}<button class="btn ghost sm" data-cdel="${i}">지우기</button></span></div>`;}).join('');}
+      return `<div class="own-row${k?' own-win':''}"><span class="own-l"><span class="gl">${(c.slot??0)+1}</span><span class="balls" style="flex-wrap:nowrap">${c.n.map(n=>`<span class="ball sm b${band(n)}"${d.n.includes(n)||(k===2&&n===d.b)?'':' style="opacity:.28"'}>${n}</span>`).join('')}</span><span class="res-line">${k?`<span class="tag hot">${k}등 당첨</span>`:`<span class="tag">낙첨 · ${m}개 일치</span>`}<span class="row" style="gap:4px">${open?`<button class="btn ghost sm" data-credo="${i}" title="이 번호를 ${NEXT}회 저장된 번호로 다시 넣기">다시하기</button>`:''}<button class="btn ghost sm" data-cdel="${i}">지우기</button></span></span></span></div>`;}).join('');}
   $('#confOut').innerHTML=html;
   $('#confInfo').textContent=open?(cn.length<MAXC?`${MAXC-cn.length}게임 더 저장할 수 있어요. 판매 마감(${nextDate()} 토 20:00) 전까지 취소할 수 있어요.`:'저장 칸이 가득 찼어요. 저장된 번호를 취소하면 더 저장할 수 있어요.'):`${NEXT}회 판매가 마감됐어요. 추첨 결과가 나오면 여기서 확인할 수 있어요.`;
   $('#saveAll').disabled=!open||cn.length>=MAXC||!curIdx().length;
@@ -1039,7 +1042,7 @@ function roundsHTML(list,title){
     const head=d?`<b>${r}회 <span style="font-weight:400;color:var(--muted);font-size:13px">${dateK(d.date)}</span>${title&&rows[0].nick&&rows[0].nick!==title?` <span class="tag" title="이 회차 때 닉네임">${esc(rows[0].nick)}</span>`:''}</b><span class="balls">${d.n.map(n=>ball(n,'xs')).join('')}<span class="plus">+</span>${ball(d.b,'xs')}</span>`:`<b>${r}회 <span style="font-weight:400;color:var(--muted);font-size:13px">추첨 전</span></b>`;
     return `<div class="stack" style="gap:6px;padding:14px 0;border-top:1px solid var(--line)">
       <div class="row" style="justify-content:space-between">${head}</div>
-      ${rows.map(h=>{const L=`<span class="gl">${h.slot!=null?String.fromCharCode(65+h.slot):'·'}</span>`;
+      ${rows.map(h=>{const L=`<span class="gl">${h.slot!=null?h.slot+1:'·'}</span>`;
         if(!d)return `<div class="row" style="gap:8px">${L}${balls(h.n,'sm')}<span class="tag">미추첨</span></div>`;
         const k=rankOf(h.n,d);const m=h.n.filter(x=>d.n.includes(x)).length;
         return `<div class="row" style="gap:8px">${L}<span class="balls">${h.n.map(n=>`<span class="ball sm b${band(n)}"${d.n.includes(n)||(k===2&&n===d.b)?'':' style="opacity:.28"'}>${n}</span>`).join('')}</span>${k?`<span class="tag hot">${k}등 당첨</span>`:`<span class="tag">낙첨 · ${m}개 일치</span>`}</div>`;}).join('')}
@@ -1289,7 +1292,7 @@ function celebrateWins(only){
   if(!only){if(store.get('celebrated',0)===LAST.no)return;store.set('celebrated',LAST.no);}
   document.querySelectorAll('.congrats,#fx').forEach(x=>x.remove());
   const box=document.createElement('div');box.className='congrats';box.setAttribute('role','status');
-  box.innerHTML=`<div class="cg-t">당첨을 축하드립니다!</div><div class="cg-s">${LAST.no}회 · ${wins.length}게임 당첨</div>${wins.map(w=>`<div class="cg-row"><span class="gl">${w.own?'보유':w.slot!=null?String.fromCharCode(65+w.slot):'·'}</span><span class="cg-b">${w.n.map(n=>`<span class="ball xs b${band(n)}">${n}</span>`).join('')}</span><span class="cg-rank">${w.k}등</span></div>`).join('')}<button class="btn ghost sm" id="cgClose">닫기</button>`;
+  box.innerHTML=`<div class="cg-t">당첨을 축하드립니다!</div><div class="cg-s">${LAST.no}회 · ${wins.length}게임 당첨</div>${wins.map(w=>`<div class="cg-row"><span class="gl">${w.own?'보유':w.slot!=null?w.slot+1:'·'}</span><span class="cg-b">${w.n.map(n=>`<span class="ball xs b${band(n)}">${n}</span>`).join('')}</span><span class="cg-rank">${w.k}등</span></div>`).join('')}<button class="btn ghost sm" id="cgClose">닫기</button>`;
   document.body.appendChild(box);
   let stop=false,cv=null;
   box.querySelector('#cgClose').onclick=()=>{box.remove();stop=true;if(cv)cv.remove();};
