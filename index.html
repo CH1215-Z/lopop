@@ -297,7 +297,7 @@ footer{color:var(--faint);font-size:12.5px;padding-block:0 30px}
   <div class="panel stack">
     <div>
       <h2>패턴별 당첨 확률</h2>
-      <p class="lead">패턴을 고르면, 그 패턴이 들어간 번호가 실제로 당첨된 비율과 이론적으로 당첨될 확률을 보여 줘요. 이론 확률은 가능한 조합 8,145,060개를 전부 따져서 구했어요. 여기서 고른 패턴은 번호 뽑기의 "선택한 패턴으로 뽑기"에 그대로 쓰여요.</p>
+      <p class="lead">패턴을 고르면, 지금까지 당첨번호가 그 패턴이었던 비율과, 그 패턴에 해당하는 조합을 전부 샀을 때 1등이 될 확률을 보여 줘요. 확률은 가능한 조합 8,145,060개를 전부 따져서 구했어요. 이 패턴으로 몇 게임만 사면 당첨 확률은 다른 번호와 똑같이 게임당 8,145,060분의 1이에요. 여기서 고른 패턴은 번호 뽑기의 "선택한 패턴으로 뽑기"에 그대로 쓰여요.</p>
     </div>
     <div class="row" id="ruleChips"></div>
     <div class="row"><span class="ctl-label">여러 개 고르면</span><div class="seg" id="ruleMode"></div></div>
@@ -687,9 +687,9 @@ function renderRules(){
   const hits=D.filter(d=>hasPat(d.m,sel)); const combos=bucketSum(m=>hasPat(m,sel)); const th=combos/TOTAL;
   $('#noPatVs').innerHTML=sel===0?`<div class="note" style="grid-column:1/-1">패턴을 하나 이상 고르면 계산돼요.</div>`:
    `<div class="note" style="grid-column:1/-1">선택: <b>${selNames()}</b></div>
-    <div class="cell"><span class="k">이 패턴으로 실제 당첨된 비율</span><span class="v hl">${pct(hits.length/N,2)}</span><span class="d">${fmt(N)}회 중 ${fmt(hits.length)}회${hits.length?' · 최근 '+hits.slice(-3).reverse().map(d=>d.no+'회').join(', '):''}</span></div>
-    <div class="cell"><span class="k">이론적으로 당첨될 확률</span><span class="v">${pct(th,2)}</span><span class="d">조합 ${fmt(combos)}개 / 8,145,060개 · 기대 ${(N*th).toFixed(1)}회</span></div>`;
-  $('#ruleTbl').innerHTML=`<tr><th>패턴 규칙</th><th>설명</th><th class="r">실제 당첨 비율</th><th class="r">이론 확률</th></tr>`+RULES.map(r=>{const a=D.filter(d=>d.m&(1<<r.id)).length;const t=bucketSum(m=>m&(1<<r.id))/TOTAL;return `<tr${selRules.has(r.id)?'':' style="color:var(--faint)"'}><td>${r.name}</td><td style="color:var(--muted);white-space:normal;min-width:180px">${r.desc}</td><td class="r num">${pct(a/N)} <span style="color:var(--faint)">(${a})</span></td><td class="r num">${pct(t)}</td></tr>`;}).join('');
+    <div class="cell"><span class="k">당첨번호가 이 패턴이었던 비율</span><span class="v hl">${pct(hits.length/N,2)}</span><span class="d">${fmt(N)}회 중 ${fmt(hits.length)}회${hits.length?' · 최근 '+hits.slice(-3).reverse().map(d=>d.no+'회').join(', '):''}</span></div>
+    <div class="cell"><span class="k">이 패턴 조합을 전부 샀을 때 1등 확률</span><span class="v">${pct(th,2)}</span><span class="d">조합 ${fmt(combos)}개(약 ${fmt(Math.round(combos/1e4)/10)}억 원어치) / 8,145,060개 · 기대 ${(N*th).toFixed(1)}회</span></div>`;
+  $('#ruleTbl').innerHTML=`<tr><th>패턴 규칙</th><th>설명</th><th class="r">당첨번호가 이 패턴이었던 비율</th><th class="r">전부 샀을 때 1등 확률</th></tr>`+RULES.map(r=>{const a=D.filter(d=>d.m&(1<<r.id)).length;const t=bucketSum(m=>m&(1<<r.id))/TOTAL;return `<tr${selRules.has(r.id)?'':' style="color:var(--faint)"'}><td>${r.name}</td><td style="color:var(--muted);white-space:normal;min-width:180px">${r.desc}</td><td class="r num">${pct(a/N)} <span style="color:var(--faint)">(${a})</span></td><td class="r num">${pct(t)}</td></tr>`;}).join('');
 }
 $('#ruleChips').onclick=e=>{const b=e.target.closest('[data-r]');if(!b)return;const id=+b.dataset.r;selRules.has(id)?selRules.delete(id):selRules.add(id);store.set('rules3',[...selRules]);renderRules();updateCoverage();};
 seg($('#ruleMode'),[['and','모두 들어간 경우'],['or','하나라도 들어간 경우']],ruleMode,v=>{ruleMode=v;store.set('rulemode',v);renderRules();updateCoverage();});
