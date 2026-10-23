@@ -24,7 +24,9 @@ def from_official(no):
     if d.get("returnValue") != "success":
         return None
     nums = sorted(d[f"drwtNo{i}"] for i in range(1, 7))
-    return [no, d["drwNoDate"], nums, d["bnusNo"], d.get("firstWinamnt", 0), d.get("firstPrzwnerCo", 0)]
+    # 공식 조회는 1등 당첨자 수만 주므로 2~5등은 비워 두고 나중에 채웁니다
+    first = d.get("firstPrzwnerCo", 0)
+    return [no, d["drwNoDate"], nums, d["bnusNo"], d.get("firstWinamnt", 0), first, [first, None, None, None, None]]
 
 
 _mirror = None
@@ -38,8 +40,11 @@ def from_mirror(no):
     r = _mirror.get(no)
     if not r:
         return None
-    first = r["divisions"][0] if r.get("divisions") else {}
-    return [no, r["date"][:10], sorted(r["numbers"]), r["bonus_no"], first.get("prize", 0), first.get("winners", 0)]
+    divs = [(v or {}) for v in (r.get("divisions") or [])]
+    if len(divs) != 5:
+        return None
+    winners = [v.get("winners", 0) for v in divs]
+    return [no, r["date"][:10], sorted(r["numbers"]), r["bonus_no"], divs[0].get("prize", 0), winners[0], winners]
 
 
 def valid(row, no):
@@ -60,6 +65,24 @@ def fetch(no):
     return None
 
 
+def fill_winners(data):
+    """등수별 당첨자 수가 비어 있는 최근 회차를 공개 저장소 값으로 채웁니다."""
+    filled = 0
+    for row in data[-10:]:
+        if len(row) >= 7 and None not in row[6]:
+            continue
+        try:
+            m = from_mirror(row[0])
+        except Exception as e:
+            print(f"{row[0]}회 등수별 당첨자 수: 가져오기 실패 ({e})")
+            return filled
+        if m and m[2] == row[2] and m[3] == row[3]:
+            row[:] = row[:6] + [m[6]]
+            filled += 1
+            print(f"{row[0]}회 등수별 당첨자 수 채움: {m[6]}")
+    return filled
+
+
 def main():
     data = json.loads(DATA.read_text(encoding="utf-8"))
     assert [r[0] for r in data] == list(range(1, len(data) + 1)), "회차 번호가 이어지지 않아요"
@@ -70,7 +93,8 @@ def main():
             break
         data.append(row)
         added += 1
-    if added:
+    filled = fill_winners(data)
+    if added or filled:
         DATA.write_text(json.dumps(data, ensure_ascii=False, separators=(",", ":")), encoding="utf-8")
     print(f"추가한 회차: {added}개 / 최신 {data[-1][0]}회")
     return 0
