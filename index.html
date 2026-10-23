@@ -914,7 +914,7 @@ function generate(){
   const used=new Set(curIdx().map(i=>saved[i].slot));const free=[0,1,2,3,4].filter(x=>!used.has(x));const filled=new Set(free.slice(0,res.length));saved=saved.filter(x=>!(x.r===LAST.no&&filled.has(x.slot)));res.forEach((a,j)=>saved.push({n:a,r:NEXT,slot:free[j],t:Date.now()}));store.set('saved',saved);renderSaved();
 }
 $('#genBtn').onclick=generate;
-$('#saveAll').onclick=saveAll;
+$('#saveAll').onclick=()=>saveAll();
 setTimeout(showNudge,900);
 
 const savedRaw=store.get('saved',[]).map(x=>Array.isArray(x)?{n:x,r:LAST.no+1}:x);
@@ -943,7 +943,7 @@ function renderSaved(){
   for(let p=0;p<MAXG;p++){const L=String.fromCharCode(65+p);const ii=ci.find(i=>saved[i].slot===p);
     if(ii!=null){const a=saved[ii].n;const d=describe(a);
       html+=`<div class="game cmp${freshKeys.has(a.join(','))?' new':''}"><div class="top"><span class="row" style="gap:8px"><span class="gl">${L}</span>${balls(a,'sm')}</span>
-      <span class="row" style="gap:4px"><button class="btn ghost sm" data-check="${a.join(',')}">조회</button><button class="btn ghost sm" data-del="${ii}">삭제</button></span></div>
+      <span class="row" style="gap:4px"><button class="btn ghost sm" data-check="${a.join(',')}">조회</button><button class="btn ghost sm" data-save1="${ii}">저장</button><button class="btn ghost sm" data-del="${ii}">삭제</button></span></div>
       <div class="mini">${d.tags.join(' · ')}${d.pats.length?` · <span style="color:var(--slip-ink)">${d.pats.join(' · ')}</span>`:''}</div></div>`;}
     else html+=`<div class="slot"><span class="gl">${L}</span>빈 자리 · 번호 뽑기를 누르면 채워져요</div>`;}
   $('#curOut').innerHTML=html;
@@ -982,15 +982,15 @@ function renderConfirmed(){
   $('#confInfo').textContent=open?(cn.length<MAXC?`${MAXC-cn.length}게임 더 저장할 수 있어요. 판매 마감(${nextDate()} 토 20:00) 전까지 취소할 수 있어요.`:'저장 칸이 가득 찼어요. 저장된 번호를 취소하면 더 저장할 수 있어요.'):`${NEXT}회 판매가 마감됐어요. 추첨 결과가 나오면 여기서 확인할 수 있어요.`;
   $('#saveAll').disabled=!open||cn.length>=MAXC||!curIdx().length;
 }
-function saveAll(){
+function saveAll(only){
   const msg=$('#genMsg');
   if(Date.now()>=closeAt(NEXT).getTime()){msg.innerHTML=`<div class="err">${NEXT}회 판매가 마감돼서 저장할 수 없어요.</div>`;return;}
   const cn=confirmed.filter(c=>c.r===NEXT);const used=new Set(cn.map(c=>c.slot));const free=[0,1,2,3,4].filter(x=>!used.has(x));
   const have=new Set(cn.map(c=>c.n.join(',')));
-  const drafts=curIdx().map(i=>saved[i]);let moved=0,dup=0;const keep=[];
+  const drafts=only||curIdx().map(i=>saved[i]);const rest=only?saved.filter(s=>!only.includes(s)):[];let moved=0,dup=0;const keep=[];
   drafts.forEach(s=>{const k=s.n.join(',');if(have.has(k)){dup++;return;}if(moved<free.length){confirmed.push({n:s.n.slice(),r:NEXT,slot:free[moved],t:Date.now()});have.add(k);moved++;}else keep.push(s);});
-  saved=keep;store.set('saved',saved);store.set('confirmed',confirmed);
-  msg.innerHTML=moved?`<div class="ok-box">${moved}게임을 저장했어요.${keep.length?` 저장 칸이 다 차서 ${keep.length}게임은 내 번호에 남겨 뒀어요.`:''}${dup?` 이미 저장한 번호 ${dup}게임은 빼고 정리했어요.`:''}</div>`:`<div class="err">${dup?'이미 저장한 번호예요.':'저장 칸이 가득 찼어요.'}</div>`;
+  saved=rest.concat(keep);store.set('saved',saved);store.set('confirmed',confirmed);
+  msg.innerHTML=moved?`<div class="ok-box">${only&&moved===1?`${String.fromCharCode(65+only[0].slot)} 번호를 저장했어요.`:`${moved}게임을 저장했어요.`}${keep.length?` 저장 칸이 다 차서 ${keep.length}게임은 내 번호에 남겨 뒀어요.`:''}${dup?` 이미 저장한 번호 ${dup}게임은 빼고 정리했어요.`:''}</div>`:`<div class="err">${dup?'이미 저장한 번호예요.':'저장 칸이 가득 찼어요.'}</div>`;
   renderSaved();
 }
 document.addEventListener('click',e=>{
@@ -1013,6 +1013,7 @@ document.addEventListener('click',e=>{
     if(free==null){msg.innerHTML='<div class="err">내 번호 칸(A~E)이 가득 찼어요. 내 번호를 하나 지운 뒤 다시 눌러 주세요.</div>';return;}
     saved.push({n:c.n.slice(),r:NEXT,slot:free,t:Date.now()});confirmed=confirmed.filter(x=>x!==c);
     store.set('saved',saved);store.set('confirmed',confirmed);msg.innerHTML=`<div class="ok-box">내 번호 ${String.fromCharCode(65+free)} 자리로 되돌렸어요.</div>`;renderSaved();return;}
+  const s1=e.target.closest('[data-save1]');if(s1){const s=saved[+s1.dataset.save1];if(s)saveAll([s]);return;}
   const cd=e.target.closest('[data-cdel]');if(cd){const c=confirmed[+cd.dataset.cdel];if(c){if(c.r===NEXT&&Date.now()>=closeAt(NEXT).getTime())return;confirmed=confirmed.filter(x=>x!==c);store.set('confirmed',confirmed);renderConfirmed();}return;}
   const cr=e.target.closest('[data-credo]');if(cr){const c=confirmed[+cr.dataset.credo];if(!c)return;const cn=confirmed.filter(x=>x.r===NEXT);const msg=$('#genMsg');
     if(cn.length>=MAXC){msg.innerHTML='<div class="err">저장 칸이 가득 찼어요. 저장된 번호를 하나 취소한 뒤 다시 눌러 주세요.</div>';return;}
