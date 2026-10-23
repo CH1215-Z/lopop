@@ -1078,11 +1078,11 @@ function celebrateWins(){
   document.body.appendChild(box);
   let stop=false,cv=null;
   box.querySelector('#cgClose').onclick=()=>{box.remove();stop=true;if(cv)cv.remove();};
-  if(matchMedia('(prefers-reduced-motion: reduce)').matches)return;
+  if(wins[0].k>=5||matchMedia('(prefers-reduced-motion: reduce)').matches)return; // 5등만 있으면 상자만
   cv=document.createElement('canvas');cv.id='fx';document.body.appendChild(cv);const c=cv.getContext('2d');const dpr=devicePixelRatio||1;
   let W,H;const fit=()=>{W=cv.width=innerWidth*dpr;H=cv.height=innerHeight*dpr;};fit();addEventListener('resize',fit);
   const COLORS=['#F6BE00','#5EBDEB','#FF6A6A','#9FCC2E','#D2253C','#FFFFFF','#FFD24A'];
-  const best=wins[0].k, dur=best<=1?7000:best<=3?5000:3500, size=best<=1?110:best<=3?80:60;
+  const best=wins[0].k, dur=best<=1?7000:best<=3?5000:2000, size=best<=1?110:best<=3?80:60;
   const rockets=[],sparks=[];
   const launch=side=>rockets.push({x:side?W*(0.82+Math.random()*0.16):W*(0.02+Math.random()*0.16),y:H,vx:(side?-1:1)*(1.5+Math.random()*2.5)*dpr,vy:-(H/62)*(0.9+Math.random()*0.25),c:COLORS[Math.random()*COLORS.length|0]});
   const burst=r=>{for(let i=0;i<size;i++){const a=Math.PI*2*i/size,s=(2+Math.random()*4.5)*dpr;sparks.push({x:r.x,y:r.y,vx:Math.cos(a)*s,vy:Math.sin(a)*s,life:1,c:Math.random()<.35?COLORS[Math.random()*COLORS.length|0]:r.c});}};
