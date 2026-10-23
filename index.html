@@ -944,10 +944,10 @@ let histArm=false;$('#histClear').onclick=e=>{const b=e.currentTarget;if(!histAr
 
 
 /* ---------- 회차별 기록 그리기 (내 히스토리 · 모두의 히스토리 공용) ---------- */
-function roundsHTML(list){
+function roundsHTML(list,title){
   const rounds=[...new Set(list.map(h=>h.r))].sort((a,b)=>b-a);
   return rounds.map(r=>{const d=D[r-1];const rows=list.filter(h=>h.r===r).sort((a,b)=>(a.slot??9)-(b.slot??9));
-    const head=d?`<b>${r}회 <span style="font-weight:400;color:var(--muted);font-size:13px">${dateK(d.date)}</span></b><span class="balls">${d.n.map(n=>ball(n,'xs')).join('')}<span class="plus">+</span>${ball(d.b,'xs')}</span>`:`<b>${r}회 <span style="font-weight:400;color:var(--muted);font-size:13px">추첨 전</span></b>`;
+    const head=d?`<b>${r}회 <span style="font-weight:400;color:var(--muted);font-size:13px">${dateK(d.date)}</span>${title&&rows[0].nick&&rows[0].nick!==title?` <span class="tag" title="이 회차 때 닉네임">${esc(rows[0].nick)}</span>`:''}</b><span class="balls">${d.n.map(n=>ball(n,'xs')).join('')}<span class="plus">+</span>${ball(d.b,'xs')}</span>`:`<b>${r}회 <span style="font-weight:400;color:var(--muted);font-size:13px">추첨 전</span></b>`;
     return `<div class="stack" style="gap:6px;padding:14px 0;border-top:1px solid var(--line)">
       <div class="row" style="justify-content:space-between">${head}</div>
       ${rows.map(h=>{const L=`<span class="gl">${h.slot!=null?String.fromCharCode(65+h.slot):'·'}</span>`;
@@ -971,7 +971,7 @@ function renderNick(){
   const box=$('#nickBox');
   if(!SB_ON){box.innerHTML=`<div class="note">공유 기능은 아직 준비 중이에요.</div>`;return;}
   box.innerHTML=`<div class="row"><input type="text" id="nickIn" maxlength="12" placeholder="닉네임 (1~12자)" aria-label="닉네임" value="${esc(nick)}" style="flex:1 1 200px;min-width:0"><button class="btn" id="nickSet">${nick?'닉네임 바꾸기':'공유 시작'}</button>${nick?'<button class="btn ghost" id="nickOff">공유 끄기</button>':''}</div>
-  <div class="mini" id="nickErr">${nick?`<b>${esc(nick)}</b>(으)로 공유 중이에요. `:''}${syncState||(nick?'이번 회차 내 번호가 자동으로 공유돼요.':'닉네임은 언제든 바꿀 수 있고, 다른 사람과 같아도 괜찮아요.')}</div>`;
+  <div class="mini" id="nickErr">${nick?`<b>${esc(nick)}</b>(으)로 공유 중이에요. `:''}${syncState||(nick?'이번 회차 내 번호가 자동으로 공유돼요.':'닉네임은 언제든 바꿀 수 있고, 다른 사람과 같아도 괜찮아요.')}<br>${'닉네임을 바꾸거나 공유를 끄면 추첨 전인 이번 회차부터 적용되고, 지난 기록은 그때 닉네임 그대로 남아요.'}</div>`;
   $('#nickSet').onclick=setNick;$('#nickIn').onkeydown=e=>{if(e.key==='Enter')setNick();};
   if(nick)$('#nickOff').onclick=async()=>{try{await sbRpc('clear_nickname',{p_key:myKey});}catch(e){}nick='';store.set('nick','');syncState='';people=null;renderNick();};
 }
@@ -1027,6 +1027,7 @@ async function loadPeople(force){
   }catch(e){msg.innerHTML=`<div class="err">${esc(e.message)}. 잠시 뒤 새로고침해 주세요.</div>`;}
 }
 function drawPeople(){
+  if(!people)return;
   const q=$('#peopleQ').value.trim();const by=new Map();
   people.forEach(p=>{if(!by.has(p.uid))by.set(p.uid,[]);by.get(p.uid).push(p);});
   const stat=[...by.entries()].map(([uid,l])=>{const k=l[0].nick;const done=l.filter(p=>D[p.r-1]);const rc=[0,0,0,0,0,0];done.forEach(p=>rc[rankOf(p.n,D[p.r-1])]++);
@@ -1038,9 +1039,9 @@ function drawPeople(){
 function showPerson(k,list){const done=list.filter(p=>D[p.r-1]);const rc=[0,0,0,0,0,0];done.forEach(p=>rc[rankOf(p.n,D[p.r-1])]++);
   $('#personPanel').hidden=false;$('#personName').textContent=`${k}님의 히스토리`;
   $('#personSum').innerHTML=`<div class="note">추첨된 게임 <b>${done.length}</b> · 당첨 <b>${done.length-rc[0]}</b>${[1,2,3,4,5].filter(x=>rc[x]).map(x=>` · ${x}등 ${rc[x]}`).join('')}</div>`;
-  $('#personOut').innerHTML=roundsHTML(list);
+  $('#personOut').innerHTML=roundsHTML(list,k);
 }
-$('#peopleTbl').onclick=e=>{const r=e.target.closest('tr[data-uid]');if(!r)return;personSel=r.dataset.uid;drawPeople();$('#personPanel').scrollIntoView({behavior:'smooth',block:'start'});};
+$('#peopleTbl').onclick=e=>{const r=e.target.closest('tr[data-uid]');if(!r)return;personSel=r.dataset.uid;if(people)drawPeople();else{loadPeople(true);return;}$('#personPanel').scrollIntoView({behavior:'smooth',block:'start'});};
 $('#peopleQ').oninput=()=>{if(people)drawPeople();};
 $('#peopleReload').onclick=()=>loadPeople(true);
 if(SB_ON)syncShared();
