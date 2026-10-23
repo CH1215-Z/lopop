@@ -1012,7 +1012,7 @@ async function loadSiteStats(){
     const cell=(k,v)=>`<div class="cell"><span class="k">${k}</span><span class="v${v&&k!=='낙첨'?' hl':''}">${fmt(v)}</span><span class="d">${k==='낙첨'?'':(e=>e<0.01?'기대 0.01게임 미만':'기대 '+e.toFixed(e<1?2:1)+'게임')(a.total*P[+k[0]])}</span></div>`;
     el.innerHTML=`<div class="stack" style="gap:10px">
       <div class="row" style="justify-content:space-between"><b>${LAST.no}회 · 이 사이트에서 뽑은 번호 ${fmt(a.total)}게임 (${fmt(a.people)}명)</b><span class="balls">${LAST.n.map(n=>ball(n,'xs')).join('')}<span class="plus">+</span>${ball(LAST.b,'xs')}</span></div>
-      ${a.total?`<div class="vs" style="grid-template-columns:repeat(auto-fit,minmax(min(100%,110px),1fr));gap:8px">${cell('1등',a.r1)}${cell('2등',a.r2)}${cell('3등',a.r3)}${cell('4등',a.r4)}${cell('5등',a.r5)}${cell('낙첨',lose)}</div>`:`<div class="note">${LAST.no}회에는 이 사이트에서 모인 번호가 없어요.</div>`}
+      ${a.total?`<div class="vs" style="grid-template-columns:repeat(auto-fit,minmax(min(100%,110px),1fr));gap:8px">${cell('1등',a.r1)}${cell('2등',a.r2)}${cell('3등',a.r3)}${cell('4등',a.r4)}${cell('5등',a.r5)}</div>`:`<div class="note">${LAST.no}회에는 이 사이트에서 모인 번호가 없어요.</div>`}
       <div class="mini">${NEXT}회는 지금까지 ${fmt(b.total)}게임(${fmt(b.people)}명)이 모였어요. 닉네임을 정하지 않은 번호도 익명으로 이 통계에 들어가요.</div>
     </div>`;
   }catch(e){el.innerHTML='';}
