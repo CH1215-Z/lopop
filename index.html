@@ -1039,7 +1039,7 @@ function drawPeople(){
 function showPerson(k,list){const done=list.filter(p=>D[p.r-1]);const rc=[0,0,0,0,0,0];done.forEach(p=>rc[rankOf(p.n,D[p.r-1])]++);
   $('#personPanel').hidden=false;$('#personName').textContent=`${k}님의 히스토리`;
   $('#personSum').innerHTML=`<div class="note">추첨된 게임 <b>${done.length}</b> · 당첨 <b>${done.length-rc[0]}</b>${[1,2,3,4,5].filter(x=>rc[x]).map(x=>` · ${x}등 ${rc[x]}`).join('')}</div>`;
-  $('#personOut').innerHTML=roundsHTML(list,k);
+  $('#personOut').innerHTML=roundsHTML(list);
 }
 $('#peopleTbl').onclick=e=>{const r=e.target.closest('tr[data-uid]');if(!r)return;personSel=r.dataset.uid;if(people)drawPeople();else{loadPeople(true);return;}$('#personPanel').scrollIntoView({behavior:'smooth',block:'start'});};
 $('#peopleQ').oninput=()=>{if(people)drawPeople();};
