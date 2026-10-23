@@ -434,14 +434,15 @@ footer{color:var(--faint);font-size:12.5px;padding-block:0 30px}
         <h2>내 번호 <small id="curSub"></small></h2>
         <div id="genMsg"></div>
         <div id="curOut"></div>
-        <div id="pastPanel" style="border-top:1px solid var(--line);padding-top:4px">
-          <div id="savedOut"></div>
-          <div class="row" style="justify-content:space-between"><span class="mini" id="savedCount"></span><button class="btn ghost sm" id="clearSaved">추첨 끝난 번호 지우기</button></div>
-        </div>
-        <div class="row"><a class="btn" href="https://www.dhlottery.co.kr" target="_blank" rel="noopener">동행복권에서 구매하기</a><button class="btn ghost" id="copyGen">번호 전체 복사</button><button class="btn ghost" id="resetAll">초기화</button></div>
-        <div class="mini">한 회차에 5게임까지 뽑을 수 있어요. 뽑은 번호는 자동으로 내 번호에 들어가고, 삭제하면 그만큼 다시 뽑을 수 있어요. 추첨(<span id="nextDraw"></span>)이 끝나면 당첨 결과가 자동으로 표시돼요. 구매는 동행복권 사이트에 로그인한 뒤 번호를 직접 골라 주세요. 내 번호는 사이트 전체 당첨 통계를 위해 익명으로 모여요.</div>
+        <div class="row"><a class="btn" href="https://www.dhlottery.co.kr" target="_blank" rel="noopener">동행복권에서 구매하기</a><button class="btn" id="saveAll" style="background:var(--ink);color:var(--panel)">번호 전체 저장</button><button class="btn ghost" id="copyGen">번호 전체 복사</button><button class="btn ghost" id="resetAll">초기화</button></div>
+        <div class="mini">내 번호는 연습장이에요. 마음껏 뽑고 지워도 기록에 남지 않아요. 살 번호가 정해지면 <b>번호 전체 저장</b>을 누르세요. 저장한 번호만 히스토리·모두의 히스토리·사이트 통계·당첨 축하에 들어가요. 구매는 동행복권 사이트에 로그인한 뒤 번호를 직접 골라 주세요.</div>
       </div>
 
+      <div class="panel stack" id="confPanel">
+        <h2>저장된 번호 <small id="confSub"></small></h2>
+        <div id="confOut"></div>
+        <div class="mini" id="confInfo"></div>
+      </div>
       <p class="disclaim">어떤 방식으로 뽑아도 한 게임이 1등에 당첨될 확률은 똑같이 8,145,060분의 1이에요. 여기 있는 통계는 지난 결과를 설명할 뿐, 다음 결과를 예측하지 않아요. 조건은 원하는 스타일로 번호를 고르는 재미로 써 주세요.</p>
     </div>
   </div>
@@ -903,50 +904,79 @@ function generate(){
   const used=new Set(curIdx().map(i=>saved[i].slot));const free=[0,1,2,3,4].filter(x=>!used.has(x));const filled=new Set(free.slice(0,res.length));saved=saved.filter(x=>!(x.r===LAST.no&&filled.has(x.slot)));res.forEach((a,j)=>saved.push({n:a,r:NEXT,slot:free[j],t:Date.now()}));store.set('saved',saved);renderSaved();
 }
 $('#genBtn').onclick=generate;
+$('#saveAll').onclick=saveAll;
 
 const savedRaw=store.get('saved',[]).map(x=>Array.isArray(x)?{n:x,r:LAST.no+1}:x);
 let hist=store.get('history',[]);
+let confirmed=store.get('confirmed',null),migrated=false;
+if(confirmed===null){ // 처음 한 번: 예전 내 번호를 저장된 번호로 옮김
+  confirmed=savedRaw.filter(s=>s.r>=LAST.no&&s.slot!=null&&s.slot<5).map(s=>({n:s.n,r:s.r,slot:s.slot,t:s.t||0}));migrated=true;}
 (()=>{const keys=new Set(hist.map(h=>h.r+'|'+(h.slot??'')+'|'+h.n.join(',')));let add=false;
-  savedRaw.filter(s=>s.r<=LAST.no).forEach(s=>{const k=s.r+'|'+(s.slot??'')+'|'+s.n.join(',');if(!keys.has(k)){keys.add(k);hist.push({n:s.n.slice(),r:s.r,slot:s.slot});add=true;}});
+  confirmed.filter(s=>s.r<=LAST.no).forEach(s=>{const k=s.r+'|'+(s.slot??'')+'|'+s.n.join(',');if(!keys.has(k)){keys.add(k);hist.push({n:s.n.slice(),r:s.r,slot:s.slot});add=true;}});
   if(add)store.set('history',hist);})();
-let saved=savedRaw.filter(s=>s.r>=LAST.no);
+confirmed=confirmed.filter(c=>c.r>=LAST.no);store.set('confirmed',confirmed);
+let saved=migrated?[]:savedRaw.filter(s=>s.r===NEXT);if(migrated)store.set('saved',saved);
+const MAXC=5;
 (()=>{const by={};saved.forEach(s=>{(by[s.r]=by[s.r]||[]).push(s);});Object.values(by).forEach(g=>{const used=new Set(g.filter(s=>s.slot!=null).map(s=>s.slot));let f=0;g.forEach(s=>{if(s.slot==null){while(used.has(f))f++;if(f<MAXG){s.slot=f;used.add(f);}}});});store.set('saved',saved);})();
-$('#nextDraw').textContent=`${LAST.no+1}회 · ${nextDate()} 토`;
+{const nd=$('#nextDraw');if(nd)nd.textContent=`${LAST.no+1}회 · ${nextDate()} 토`;}
 function renderSaved(){
   const ci=curIdx();const rem=MAXG-ci.length;
   $('#curSub').textContent=`${NEXT}회 · ${ci.length}/${MAXG}게임`;
   const gb=$('#genBtn');gb.disabled=rem<=0;gb.textContent=rem>0?`번호 뽑기 (${rem}게임)`:'5게임 꽉 참';
-  const pastAll=saved.map((s,i)=>[s,i]).filter(([s])=>s.r<=LAST.no).sort((x,y)=>y[0].r-x[0].r);
   let html='';
   for(let p=0;p<MAXG;p++){const L=String.fromCharCode(65+p);const ii=ci.find(i=>saved[i].slot===p);
     if(ii!=null){const a=saved[ii].n;const d=describe(a);
-      html+=`<div class="game cmp${freshKeys.has(a.join(','))?' new':''}"><div class="top"><span class="row" style="gap:8px"><span class="gl">${L}</span>${balls(a,'sm')}<span class="tag">${NEXT}회 미추첨</span></span>
+      html+=`<div class="game cmp${freshKeys.has(a.join(','))?' new':''}"><div class="top"><span class="row" style="gap:8px"><span class="gl">${L}</span>${balls(a,'sm')}</span>
       <span class="row" style="gap:4px"><button class="btn ghost sm" data-check="${a.join(',')}">조회</button><button class="btn ghost sm" data-del="${ii}">삭제</button></span></div>
       <div class="mini">${d.tags.join(' · ')}${d.pats.length?` · <span style="color:var(--slip-ink)">${d.pats.join(' · ')}</span>`:''}</div></div>`;}
-    else html+=`<div class="slot"><span class="gl">${L}</span>빈 자리 · 번호 뽑기를 누르면 채워져요</div>`;
-    html+=pastAll.filter(([s])=>s.slot===p&&s.r===LAST.no).map(([s,i])=>savedHTML(s,i,true)).join('');}
-  // 현재 회차 중 슬롯 밖(예전 데이터) 항목
-  html+=ci.filter(i=>saved[i].slot==null).map(i=>savedHTML(saved[i],i)).join('');
+    else html+=`<div class="slot"><span class="gl">${L}</span>빈 자리 · 번호 뽑기를 누르면 채워져요</div>`;}
   $('#curOut').innerHTML=html;
   freshKeys=new Set();
-  const loose=pastAll.filter(([s])=>s.slot==null);
-  $('#pastPanel').hidden=true;
-  $('#savedCount').textContent=`추첨 끝난 번호 ${pastAll.length}게임`;
-  $('#savedOut').innerHTML=loose.map(([s,i])=>savedHTML(s,i)).join('');
-}document.addEventListener('click',e=>{
+  renderConfirmed();
+}
+function renderConfirmed(){
+  const open=Date.now()<closeAt(NEXT).getTime();
+  const cn=confirmed.map((c,i)=>[c,i]).filter(([c])=>c.r===NEXT).sort((a,b)=>a[0].slot-b[0].slot);
+  const cl=confirmed.map((c,i)=>[c,i]).filter(([c])=>c.r===LAST.no).sort((a,b)=>a[0].slot-b[0].slot);
+  $('#confSub').textContent=`${NEXT}회 · ${cn.length}/${MAXC}게임`;
+  let html=cn.map(([c,i],p)=>`<div class="own-row"><span class="own-l"><span class="gl">${p+1}</span>${balls(c.n,'sm')}<span class="tag">${NEXT}회 미추첨</span></span>${open?`<button class="btn ghost sm" data-cdel="${i}">취소</button>`:''}</div>`).join('');
+  if(!cn.length)html=`<div class="empty" style="padding:6px 0">아직 저장한 번호가 없어요. 내 번호를 뽑고 <b>번호 전체 저장</b>을 누르세요.</div>`;
+  if(cl.length){const d=LAST;
+    html+=`<div class="mini" style="margin-top:12px;font-weight:600">${LAST.no}회 결과</div>`+cl.map(([c,i])=>{const k=rankOf(c.n,d),m=c.n.filter(x=>d.n.includes(x)).length;
+      return `<div class="own-row${k?' game sub win':''}" style="${k?'padding-left:8px;':''}"><span class="own-l"><span class="balls">${c.n.map(n=>`<span class="ball sm b${band(n)}"${d.n.includes(n)||(k===2&&n===d.b)?'':' style="opacity:.28"'}>${n}</span>`).join('')}</span>${k?`<span class="tag hot">${k}등 당첨</span>`:`<span class="tag">낙첨 · ${m}개 일치</span>`}</span><span class="row" style="gap:4px;flex:none">${open?`<button class="btn ghost sm" data-credo="${i}" title="이 번호를 ${NEXT}회 저장된 번호로 다시 넣기">다시하기</button>`:''}<button class="btn ghost sm" data-cdel="${i}">지우기</button></span></div>`;}).join('');}
+  $('#confOut').innerHTML=html;
+  $('#confInfo').textContent=open?(cn.length<MAXC?`${MAXC-cn.length}게임 더 저장할 수 있어요. 판매 마감(${nextDate()} 토 20:00) 전까지 취소할 수 있어요.`:'저장 칸이 가득 찼어요. 저장된 번호를 취소하면 더 저장할 수 있어요.'):`${NEXT}회 판매가 마감됐어요. 추첨 결과가 나오면 여기서 확인할 수 있어요.`;
+  $('#saveAll').disabled=!open||cn.length>=MAXC||!curIdx().length;
+}
+function saveAll(){
+  const msg=$('#genMsg');
+  if(Date.now()>=closeAt(NEXT).getTime()){msg.innerHTML=`<div class="err">${NEXT}회 판매가 마감돼서 저장할 수 없어요.</div>`;return;}
+  const cn=confirmed.filter(c=>c.r===NEXT);const used=new Set(cn.map(c=>c.slot));const free=[0,1,2,3,4].filter(x=>!used.has(x));
+  const have=new Set(cn.map(c=>c.n.join(',')));
+  const drafts=curIdx().map(i=>saved[i]);let moved=0,dup=0;const keep=[];
+  drafts.forEach(s=>{const k=s.n.join(',');if(have.has(k)){dup++;return;}if(moved<free.length){confirmed.push({n:s.n.slice(),r:NEXT,slot:free[moved],t:Date.now()});have.add(k);moved++;}else keep.push(s);});
+  saved=keep;store.set('saved',saved);store.set('confirmed',confirmed);
+  msg.innerHTML=moved?`<div class="ok-box">${moved}게임을 저장했어요.${keep.length?` 저장 칸이 다 차서 ${keep.length}게임은 내 번호에 남겨 뒀어요.`:''}${dup?` 이미 저장한 번호 ${dup}게임은 빼고 정리했어요.`:''}</div>`:`<div class="err">${dup?'이미 저장한 번호예요.':'저장 칸이 가득 찼어요.'}</div>`;
+  renderSaved();
+}
+document.addEventListener('click',e=>{
   const ck=e.target.closest('[data-check]');if(ck){chk=ck.dataset.check.split(',').map(Number);store.set('chk',chk);openTab('draws');try{history.replaceState(null,'','#draws');}catch(err){}renderChk();window.scrollTo({top:0,behavior:'smooth'});return;}
   const dr=e.target.closest('[data-draw]');if(dr){$('#drawQ').value=dr.dataset.draw;showOne();$('#drawOne').scrollIntoView({behavior:'smooth',block:'center'});return;}
   const c=e.target.closest('[data-copy]');if(c){copyText(c.dataset.copy,c);return;}
   const s=e.target.closest('[data-save]');if(s){const a=s.dataset.save.split(',').map(Number);if(!saved.some(x=>x.r===LAST.no+1&&x.n.join()===a.join())){saved.unshift({n:a,r:LAST.no+1});store.set('saved',saved);renderSaved();}s.textContent='저장됨';s.disabled=true;return;}
   const rd=e.target.closest('[data-redo]');if(rd){const s=saved[+rd.dataset.redo];if(s){saved=saved.filter(x=>!(x.r===NEXT&&x.slot===s.slot));s.r=NEXT;s.t=Date.now();freshKeys=new Set([s.n.join(',')]);store.set('saved',saved);renderSaved();}return;}
-  const d=e.target.closest('[data-del]');if(d){const s=saved[+d.dataset.del];if(s){saved=saved.filter(x=>x!==s&&!(s.r===NEXT&&s.slot!=null&&x.r===LAST.no&&x.slot===s.slot));store.set('saved',saved);renderSaved();}}
+  const d=e.target.closest('[data-del]');if(d){const s=saved[+d.dataset.del];if(s){saved=saved.filter(x=>x!==s);store.set('saved',saved);renderSaved();}return;}
+  const cd=e.target.closest('[data-cdel]');if(cd){const c=confirmed[+cd.dataset.cdel];if(c){if(c.r===NEXT&&Date.now()>=closeAt(NEXT).getTime())return;confirmed=confirmed.filter(x=>x!==c);store.set('confirmed',confirmed);renderConfirmed();}return;}
+  const cr=e.target.closest('[data-credo]');if(cr){const c=confirmed[+cr.dataset.credo];if(!c)return;const cn=confirmed.filter(x=>x.r===NEXT);const msg=$('#genMsg');
+    if(cn.length>=MAXC){msg.innerHTML='<div class="err">저장 칸이 가득 찼어요. 저장된 번호를 하나 취소한 뒤 다시 눌러 주세요.</div>';return;}
+    if(cn.some(x=>x.n.join()===c.n.join())){confirmed=confirmed.filter(x=>x!==c);}else{const used=new Set(cn.map(x=>x.slot));c.r=NEXT;c.slot=[0,1,2,3,4].find(x=>!used.has(x));c.t=Date.now();}
+    store.set('confirmed',confirmed);renderConfirmed();return;}
 });
 function copyText(t,btn){const done=()=>{const o=btn.textContent;btn.textContent='복사됨';setTimeout(()=>btn.textContent=o,1200);};
   try{navigator.clipboard.writeText(t).then(done,()=>fallback());}catch(e){fallback();}
   function fallback(){const ta=document.createElement('textarea');ta.value=t;document.body.appendChild(ta);ta.select();try{document.execCommand('copy');done();}catch(e){}ta.remove();}}
 let resetArm=false;$('#resetAll').onclick=e=>{const b=e.currentTarget;if(!saved.length)return;if(!resetArm){resetArm=true;b.textContent='한 번 더 누르면 전부 삭제';setTimeout(()=>{resetArm=false;b.textContent='초기화';},2500);return;}resetArm=false;b.textContent='초기화';saved=[];store.set('saved',saved);$('#genMsg').innerHTML='';renderSaved();};
 $('#copyGen').onclick=e=>{const g=curIdx().map(i=>saved[i]);if(g.length)copyText(g.map(s=>String.fromCharCode(65+(s.slot??0))+' '+s.n.join(' ')).join('\n'),e.currentTarget);};
-let clearArm=false;$('#clearSaved').onclick=e=>{const b=e.currentTarget;if(!saved.some(s=>s.r<=LAST.no))return;if(!clearArm){clearArm=true;b.textContent='한 번 더 누르면 삭제';setTimeout(()=>{clearArm=false;b.textContent='모두 지우기';},2500);return;}saved=saved.filter(s=>s.r>LAST.no);store.set('saved',saved);renderSaved();clearArm=false;b.textContent='모두 지우기';};
 
 
 /* ---------- 패턴 + 배수 조합 ---------- */
@@ -1045,8 +1075,8 @@ async function setNick(){
 }
 let syncTimer=null;
 const _set=store.set;let pushTimer=null;
-store.set=(k,v)=>{_set(k,v);if(k==='saved'){clearTimeout(syncTimer);syncTimer=setTimeout(syncShared,600);}
-  if(['saved','owned','history','nick'].includes(k)&&typeof linked!=='undefined'&&linked){clearTimeout(pushTimer);pushTimer=setTimeout(()=>pushState().catch(()=>{}),800);}};
+store.set=(k,v)=>{_set(k,v);if(k==='confirmed'){clearTimeout(syncTimer);syncTimer=setTimeout(syncShared,600);}
+  if(['saved','confirmed','owned','history','nick'].includes(k)&&typeof linked!=='undefined'&&linked){clearTimeout(pushTimer);pushTimer=setTimeout(()=>pushState().catch(()=>{}),800);}};
 async function syncShared(){
   if(!SB_ON)return;
   if(Date.now()>=closeAt(NEXT).getTime()){syncState=`${NEXT}회 판매가 마감돼서 지금은 바꾼 번호가 공유되지 않아요.`;renderNick();return;}
@@ -1054,12 +1084,12 @@ async function syncShared(){
     const uid=await myUidP;if(!uid)throw new Error('이 브라우저에서는 공유 기능을 쓸 수 없어요');
     const server=await sbGet(`shared_picks?select=slot,numbers&uid=eq.${uid}&round=eq.${NEXT}`);
     const sv={};server.forEach(p=>sv[p.slot]=p.numbers.join(','));
-    const local={};saved.filter(s=>s.r===NEXT&&s.slot!=null).forEach(s=>local[s.slot]=s.n);
+    const local={};confirmed.filter(s=>s.r===NEXT&&s.slot!=null).forEach(s=>local[s.slot]=s.n);
     for(let slot=0;slot<5;slot++){
       if(local[slot]&&sv[slot]!==local[slot].join(','))await sbRpc('save_pick',{p_key:myKey,p_nickname:nick||'',p_round:NEXT,p_slot:slot,p_numbers:local[slot]});
       else if(!local[slot]&&sv[slot])await sbRpc('delete_pick',{p_key:myKey,p_round:NEXT,p_slot:slot});
     }
-    syncState=`${NEXT}회 내 번호 ${Object.keys(local).length}게임 ${nick?'공유됨':'익명 통계에 반영됨'} · ${new Date().toLocaleTimeString('ko-KR',{hour:'2-digit',minute:'2-digit'})}`;
+    syncState=`${NEXT}회 저장된 번호 ${Object.keys(local).length}게임 ${nick?'공유됨':'익명 통계에 반영됨'} · ${new Date().toLocaleTimeString('ko-KR',{hour:'2-digit',minute:'2-digit'})}`;
     people=null;
   }catch(e){syncState=`공유하지 못했어요: ${e.message}`;}
   if(!$('[data-view="hist"]').hidden)renderNick();
@@ -1160,22 +1190,23 @@ $('#ownOut').onclick=e=>{const b=e.target.closest('[data-owndel]');if(!b)return;
 
 /* ---------- 다른 기기 연결 (같은 열쇠를 나눠 쓰고, 기록은 서버 user_state 에 비공개 보관) ---------- */
 var linked=store.get('linked',false);let stateAt=store.get('stateAt',null),linkMode='show',linkMsg='',codeInfo=null,codeTimer=null,linkPrefill='';
-const stateData=()=>({v:1,saved,owned,history:hist,nick});
+const stateData=()=>({v:2,saved,confirmed,owned,history:hist,nick});
 function applyState(d){
   if(!d)return;
   const hk=new Set(hist.map(h=>h.r+'|'+(h.slot??'')+'|'+h.n.join(',')));
   (d.history||[]).forEach(h=>{const k=h.r+'|'+(h.slot??'')+'|'+h.n.join(',');if(!hk.has(k)){hk.add(k);hist.push(h);}});
-  (d.saved||[]).filter(s=>s.r<=LAST.no).forEach(s=>{const k=s.r+'|'+(s.slot??'')+'|'+s.n.join(',');if(!hk.has(k)){hk.add(k);hist.push({n:s.n.slice(),r:s.r,slot:s.slot});}});
-  saved=(d.saved||[]).filter(s=>s.r>=LAST.no);owned=(d.owned||[]).filter(o=>o.r>=LAST.no);
+  (d.confirmed||[]).filter(s=>s.r<=LAST.no).forEach(s=>{const k=s.r+'|'+(s.slot??'')+'|'+s.n.join(',');if(!hk.has(k)){hk.add(k);hist.push({n:s.n.slice(),r:s.r,slot:s.slot});}});
+  saved=(d.saved||[]).filter(s=>s.r===NEXT);confirmed=(d.confirmed||[]).filter(c=>c.r>=LAST.no);owned=(d.owned||[]).filter(o=>o.r>=LAST.no);
   if(typeof d.nick==='string')nick=d.nick;
-  _set('saved',saved);_set('owned',owned);_set('history',hist);_set('nick',nick);
+  _set('saved',saved);_set('confirmed',confirmed);_set('owned',owned);_set('history',hist);_set('nick',nick);
   renderSaved();renderOwned();renderHist();renderNick();people=null;syncShared();
 }
 function mergeState(a,b){ // a: 서버(연결 대상), b: 이 기기
   const sm=new Map();[...(a.saved||[]),...(b.saved||[])].forEach(s=>{const k=s.r+'|'+(s.slot??('x'+s.n.join(',')));const o=sm.get(k);if(!o||(s.t||0)>(o.t||0))sm.set(k,s);});
+  const cm=new Map();[...(a.confirmed||[]),...(b.confirmed||[])].forEach(s=>{const k=s.r+'|'+s.slot;const o=cm.get(k);if(!o||(s.t||0)>(o.t||0))cm.set(k,s);});
   const om=new Map();[...(a.owned||[]),...(b.owned||[])].forEach(o=>om.set(o.r+'|'+o.n.join(','),o));
   const hm=new Map();[...(a.history||[]),...(b.history||[])].forEach(h=>hm.set(h.r+'|'+(h.slot??'')+'|'+h.n.join(','),h));
-  return {v:1,saved:[...sm.values()],owned:[...om.values()],history:[...hm.values()],nick:a.nick||b.nick||''};
+  return {v:2,saved:[...sm.values()],confirmed:[...cm.values()],owned:[...om.values()],history:[...hm.values()],nick:a.nick||b.nick||''};
 }
 async function pullState(){
   const r=await sbRpc('get_state',{p_key:myKey});
@@ -1238,8 +1269,8 @@ async function redeemCode(raw){
     stateAt=r&&r.updated_at||null;
     const merged=mergeState((r&&r.data)||{},local);
     applyState(merged);await pushState();
-    const nS=saved.filter(s=>s.r===NEXT).length,nO=owned.length,nH=new Set(hist.map(h=>h.r)).size;
-    linkMsg=`연결됐어요! <b>내 번호 ${nS}게임</b>, <b>가진 번호 ${nO}게임</b>, <b>히스토리 ${nH}개 회차</b>${nick?`, 닉네임 <b>${esc(nick)}</b>`:''}을 맞췄어요.`;
+    const nS=confirmed.filter(s=>s.r===NEXT).length,nO=owned.length,nH=new Set(hist.map(h=>h.r)).size;
+    linkMsg=`연결됐어요! <b>저장된 번호 ${nS}게임</b>, <b>가진 번호 ${nO}게임</b>, <b>히스토리 ${nH}개 회차</b>${nick?`, 닉네임 <b>${esc(nick)}</b>`:''}을 맞췄어요.`;
     linkPrefill='';try{history.replaceState(null,'','#hist');}catch(e){}
   }catch(e){linkMsg=esc(e.message);}
   renderLink();
@@ -1251,7 +1282,7 @@ linkFromHash();addEventListener('hashchange',linkFromHash);
 
 /* ---------- 당첨 축하 (최신 회차 내 번호가 1~5등이면 한 번만) ---------- */
 function celebrateWins(only){
-  const mine=saved.filter(s=>s.r===LAST.no).map(s=>({slot:s.slot,n:s.n,k:rankOf(s.n,LAST)}));
+  const mine=confirmed.filter(s=>s.r===LAST.no).map(s=>({slot:s.slot,n:s.n,k:rankOf(s.n,LAST)}));
   const own=(only||owned.filter(o=>o.r===LAST.no)).map(o=>({own:true,n:o.n,k:rankOf(o.n,LAST)}));
   const wins=(only?own:mine.concat(own)).filter(w=>w.k).sort((a,b)=>a.k-b.k||(a.own?1:0)-(b.own?1:0)||(a.slot??9)-(b.slot??9));
   if(!wins.length)return;
@@ -1289,8 +1320,8 @@ $('#chkRand').onclick=()=>{chk=sampleFrom([...Array(45)].map((_,i)=>i+1),6,null)
 function fillChkFrom(){
   const cur=chk.slice().sort((x,y)=>x-y).join(',');
   const opt=(a,l)=>{const v=a.join(',');return `<option value="${v}"${v===cur?' selected':''}>${l} · ${a.join(' ')}</option>`;};
-  const nowS=curIdx().map(i=>saved[i]), now=nowS.map(s=>s.n), past=saved.filter(s=>s.r<=LAST.no);
-  $('#chkFrom').innerHTML=(now.length||past.length)?`<option value="">내 번호에서 고르기</option>`+(now.length?`<optgroup label="${NEXT}회 내 번호">${nowS.map(s=>opt(s.n,String.fromCharCode(65+(s.slot??0)))).join('')}</optgroup>`:'')+(past.length?`<optgroup label="지난 회차">${past.map(s=>opt(s.n,s.r+'회')).join('')}</optgroup>`:''):`<option value="">번호 뽑기 탭에서 뽑은 번호가 여기 나와요</option>`;
+  const nowS=confirmed.filter(c=>c.r===NEXT).sort((a,b)=>a.slot-b.slot).map((c,i)=>({n:c.n,slot:i})).concat(curIdx().map(i=>({n:saved[i].n,slot:null,L:String.fromCharCode(65+saved[i].slot)}))), now=nowS.map(s=>s.n), past=confirmed.filter(s=>s.r<=LAST.no);
+  $('#chkFrom').innerHTML=(now.length||past.length)?`<option value="">내 번호에서 고르기</option>`+(now.length?`<optgroup label="${NEXT}회 내 번호">${nowS.map(s=>opt(s.n,s.L?'내 번호 '+s.L:'저장 '+(s.slot+1))).join('')}</optgroup>`:'')+(past.length?`<optgroup label="지난 회차">${past.map(s=>opt(s.n,s.r+'회')).join('')}</optgroup>`:''):`<option value="">번호 뽑기 탭에서 뽑은 번호가 여기 나와요</option>`;
 }$('#chkFrom').onchange=e=>{if(!e.target.value)return;chk=e.target.value.split(',').map(Number);store.set('chk',chk);renderChk();};
 function renderChk(){
   fillChkFrom();
