@@ -207,6 +207,9 @@ a.btn{text-decoration:none;display:inline-block}
 .code-big{font-family:var(--f-num);font-size:28px;font-weight:600;letter-spacing:.12em}
 .ok-box{background:var(--good-soft);color:var(--good);border-radius:8px;padding:10px 12px;font-size:14px}
 .ok-box b{color:var(--ink)}
+.nudge-pop{position:fixed;left:50%;top:calc(env(safe-area-inset-top,0px) + 90px);transform:translateX(-50%);z-index:62;width:min(400px,calc(100vw - 32px));box-shadow:0 18px 50px rgba(0,0,0,.2);flex-direction:column;align-items:stretch!important;animation:cg-in .4s cubic-bezier(.2,1.4,.4,1) both}
+.nudge.nudge-pop .nudge-t{flex:none}
+.nudge-pop .nudge-balls{display:flex;flex-direction:column;gap:6px;margin:4px 0}
 .nudge{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;background:#FFF4CF;border:1.5px solid #E8B21E;border-radius:var(--r);padding:14px 16px;color:#4A3A00;font-size:14px}
 .nudge .nudge-t{flex:1 1 260px;min-width:0}
 @media (prefers-color-scheme:dark){:root:not([data-theme="light"]) .nudge{background:#3A3115;color:#F3E3A6}}
@@ -374,10 +377,6 @@ footer{color:var(--faint);font-size:12.5px;padding-block:0 30px}
 
 <!-- ============ PICK ============ -->
 <section class="wrap" data-view="pick" hidden>
-  <div class="nudge" id="saveNudge" hidden role="status">
-    <div class="nudge-t"><b>이제 번호 전체 저장을 눌러야 기록돼요.</b> 내 번호에 있는 번호는 연습장이라 이번 회차 히스토리·통계·당첨 확인에 들어가지 않아요. 지금 내 번호를 저장할까요?</div>
-    <div class="row" style="gap:6px;flex:none"><button class="btn" id="nudgeSave">저장하기</button><button class="btn ghost" id="nudgeLater">나중에</button></div>
-  </div>
   <div class="gen">
     <div class="panel">
       <div class="opt">
@@ -916,8 +915,7 @@ function generate(){
 }
 $('#genBtn').onclick=generate;
 $('#saveAll').onclick=saveAll;
-$('#nudgeSave').onclick=()=>{saveAll();$('#saveNudge').hidden=true;$('#confPanel').scrollIntoView({behavior:'smooth',block:'center'});};
-$('#nudgeLater').onclick=()=>{store.set('nudge',NEXT);$('#saveNudge').hidden=true;};
+setTimeout(showNudge,900);
 
 const savedRaw=store.get('saved',[]).map(x=>Array.isArray(x)?{n:x,r:LAST.no+1}:x);
 let hist=store.get('history',[]);
@@ -947,10 +945,19 @@ function renderSaved(){
   renderConfirmed();
 }
 let editIdx=-1;
-function renderNudge(){
-  const el=$('#saveNudge');if(!el)return;
-  const show=Date.now()<closeAt(NEXT).getTime()&&curIdx().length>0&&!confirmed.some(c=>c.r===NEXT)&&store.get('nudge',0)!==NEXT;
-  el.hidden=!show;
+function nudgeNeeded(){return Date.now()<closeAt(NEXT).getTime()&&curIdx().length>0&&!confirmed.some(c=>c.r===NEXT)&&store.get('nudge',0)!==NEXT;}
+function renderNudge(){const el=document.getElementById('saveNudge');if(el&&!nudgeNeeded())el.remove();}
+function showNudge(){
+  if(!nudgeNeeded()||document.getElementById('saveNudge'))return;
+  if(document.querySelector('.congrats')){setTimeout(showNudge,1500);return;} // 당첨 축하가 떠 있으면 닫힌 뒤에
+  const d=curIdx().map(i=>saved[i]);
+  const el=document.createElement('div');el.className='nudge nudge-pop';el.id='saveNudge';el.setAttribute('role','dialog');el.setAttribute('aria-label','번호 저장 안내');
+  el.innerHTML=`<div class="nudge-t"><b>${NEXT}회 번호, 저장하셨나요?</b><br>이제 <b>번호 전체 저장</b>을 눌러야 히스토리·통계·당첨 확인에 들어가요. 내 번호에 있는 아래 ${d.length}게임은 아직 저장 전이에요.</div>
+    <div class="nudge-balls">${d.map(s=>`<span class="row" style="gap:8px"><span class="gl">${String.fromCharCode(65+s.slot)}</span>${balls(s.n,'xs')}</span>`).join('')}</div>
+    <div class="row" style="gap:6px;justify-content:flex-end"><button class="btn ghost" id="nudgeLater">나중에</button><button class="btn" id="nudgeSave">지금 저장하기</button></div>`;
+  document.body.appendChild(el);
+  el.querySelector('#nudgeSave').onclick=()=>{el.remove();openTab('pick');try{history.replaceState(null,'','#pick');}catch(e){}saveAll();setTimeout(()=>$('#confPanel').scrollIntoView({behavior:'smooth',block:'center'}),100);};
+  el.querySelector('#nudgeLater').onclick=()=>{store.set('nudge',NEXT);el.remove();};
 }
 function renderConfirmed(){
   renderNudge();
