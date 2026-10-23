@@ -1128,8 +1128,15 @@ let syncTimer=null;
 const _set=store.set;let pushTimer=null;
 store.set=(k,v)=>{_set(k,v);if(k==='confirmed'){clearTimeout(syncTimer);syncTimer=setTimeout(syncShared,600);}
   if(['saved','confirmed','owned','history','nick'].includes(k)&&typeof linked!=='undefined'&&linked){clearTimeout(pushTimer);pushTimer=setTimeout(()=>pushState().catch(()=>{}),800);}};
+async function cleanPrevKeys(){ // 연결 전 이 기기 열쇠로 공유된 이번 회차 번호를 지움 (성공할 때까지 매번 시도)
+  const pk=store.get('prevKeys',[]);if(!pk.length||Date.now()>=closeAt(NEXT).getTime())return;
+  const left=[];
+  for(const k of pk){let ok=true;for(let slot=0;slot<5;slot++){try{await sbRpc('delete_pick',{p_key:k,p_round:NEXT,p_slot:slot});}catch(e){ok=false;}}if(!ok)left.push(k);}
+  _set('prevKeys',left);
+}
 async function syncShared(){
   if(!SB_ON)return;
+  cleanPrevKeys().catch(()=>{});
   if(Date.now()>=closeAt(NEXT).getTime()){syncState=`${NEXT}회 판매가 마감돼서 지금은 바꾼 번호가 공유되지 않아요.`;renderNick();return;}
   try{
     const uid=await myUidP;if(!uid)throw new Error('이 브라우저에서는 공유 기능을 쓸 수 없어요');
@@ -1318,7 +1325,7 @@ async function redeemCode(raw){
     const key=await sbRpc('redeem_link_code',{p_code:code});
     if(key===myKey){linkMsg='이 기기에서 만든 코드예요. 다른 기기에서 넣어 주세요.';renderLink();return;}
     const oldKey=myKey,local=stateData();
-    if(Date.now()<closeAt(NEXT).getTime())for(let slot=0;slot<5;slot++){try{await sbRpc('delete_pick',{p_key:oldKey,p_round:NEXT,p_slot:slot});}catch(e){}}
+    {const pk=store.get('prevKeys',[]);if(!pk.includes(oldKey))pk.push(oldKey);_set('prevKeys',pk);}
     myKey=key;_set('key',key);myUidP=uidOf(key);myUid=await myUidP;startPresence();
     linked=true;_set('linked',true);
     const r=await sbRpc('get_state',{p_key:key});
