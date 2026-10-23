@@ -171,6 +171,18 @@ a.btn{text-decoration:none;display:inline-block}
 .game.sub .ball.sm{--s:22px}
 #online{display:inline-flex;align-items:center;gap:5px;margin-left:8px;color:var(--good);font-weight:600}
 #online .dot{width:7px;height:7px;border-radius:50%;background:var(--good);box-shadow:0 0 0 3px var(--good-soft)}
+#fx{position:fixed;inset:0;pointer-events:none;z-index:60}
+.congrats{position:fixed;left:50%;top:calc(env(safe-area-inset-top,0px) + 84px);transform:translateX(-50%);z-index:61;background:var(--panel);border:2px solid #E8B21E;border-radius:14px;padding:18px 22px 16px;box-shadow:0 18px 50px rgba(0,0,0,.18);text-align:center;width:min(380px,calc(100vw - 32px));max-height:calc(100vh - 120px);overflow-y:auto;animation:cg-in .5s cubic-bezier(.2,1.4,.4,1) both}
+.congrats .cg-t{font-family:var(--f-display);font-size:26px;color:var(--slip-ink);letter-spacing:.02em}
+.congrats .cg-s{margin-top:6px;font-size:14px;color:var(--muted)}
+.congrats .cg-row{display:flex;align-items:center;justify-content:center;gap:8px;margin-top:10px}
+.congrats .cg-b{display:flex;gap:4px}
+.congrats .cg-rank{font-weight:700;color:#9A6B00;background:#FFF4CF;border-radius:999px;padding:2px 10px;font-size:13px;min-width:44px}
+.congrats button{margin-top:14px}
+@keyframes cg-in{from{transform:translateX(-50%) scale(.7);opacity:0}to{transform:translateX(-50%) scale(1);opacity:1}}
+.game.sub.win{background:linear-gradient(90deg,#FFF4CF,transparent);border-radius:8px}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]) .game.sub.win{background:linear-gradient(90deg,rgba(232,178,30,.22),transparent)}}
+:root[data-theme="dark"] .game.sub.win{background:linear-gradient(90deg,rgba(232,178,30,.22),transparent)}
 .err{color:var(--slip-ink);background:var(--slip-soft);border-radius:8px;padding:10px 12px;font-size:14px}
 .empty{color:var(--muted);font-size:14px;padding:18px 0;text-align:center}
 .disclaim{font-size:12.5px;color:var(--muted);border-left:3px solid var(--slip);padding:4px 0 4px 12px;max-width:80ch}
@@ -824,7 +836,7 @@ function savedHTML(s,i,sub){
   else{const k=rankOf(s.n,d);const m=s.n.filter(x=>d.n.includes(x)).length;
     status=k?`<span class="tag hot">${s.r}회 ${k}등 당첨</span>`:`<span class="tag">${s.r}회 낙첨 · ${m}개 일치</span>`;
     bl=`<span class="balls">${s.n.map(n=>`<span class="ball sm b${band(n)}"${d.n.includes(n)||(k===2&&n===d.b)?'':' style="opacity:.28"'}>${n}</span>`).join('')}</span>`;}
-  return `<div class="game cmp${sub?' sub':''}"><div class="top"><span class="row" style="gap:8px">${sub?'<span class="gl">↳</span>':''}${bl}${status}</span>
+  return `<div class="game cmp${sub?' sub':''}${d&&rankOf(s.n,d)?' win':''}"><div class="top"><span class="row" style="gap:8px">${sub?'<span class="gl">↳</span>':''}${bl}${status}</span>
   <span class="row" style="gap:4px">${sub?`<button class="btn ghost sm" data-redo="${i}" title="이 번호를 위 자리의 다음 회차 번호로 넣고 결과 지우기">다시하기</button>`:`<button class="btn ghost sm" data-check="${s.n.join(',')}">조회</button><button class="btn ghost sm" data-del="${i}">삭제</button>`}</span></div></div>`;
 }
 const MAXG=5, NEXT=LAST.no+1;
@@ -1054,6 +1066,36 @@ if(SB_ON)syncShared();
       .subscribe(async s=>{if(s==='SUBSCRIBED'){try{await ch.track({at:Date.now()});}catch(e){}}});
   }catch(e){console.warn('접속자 수 표시 실패',e);}
 })();
+
+
+/* ---------- 당첨 축하 (최신 회차 내 번호가 1~5등이면 한 번만) ---------- */
+function celebrateWins(){
+  const wins=saved.filter(s=>s.r===LAST.no).map(s=>({slot:s.slot,n:s.n,k:rankOf(s.n,LAST)})).filter(w=>w.k).sort((a,b)=>a.k-b.k||(a.slot??9)-(b.slot??9));
+  if(!wins.length||store.get('celebrated',0)===LAST.no)return;
+  store.set('celebrated',LAST.no);
+  const box=document.createElement('div');box.className='congrats';box.setAttribute('role','status');
+  box.innerHTML=`<div class="cg-t">당첨을 축하드립니다!</div><div class="cg-s">${LAST.no}회 · 내 번호 ${wins.length}게임 당첨</div>${wins.map(w=>`<div class="cg-row"><span class="gl">${w.slot!=null?String.fromCharCode(65+w.slot):'·'}</span><span class="cg-b">${w.n.map(n=>`<span class="ball xs b${band(n)}">${n}</span>`).join('')}</span><span class="cg-rank">${w.k}등</span></div>`).join('')}<button class="btn ghost sm" id="cgClose">닫기</button>`;
+  document.body.appendChild(box);
+  let stop=false,cv=null;
+  box.querySelector('#cgClose').onclick=()=>{box.remove();stop=true;if(cv)cv.remove();};
+  if(matchMedia('(prefers-reduced-motion: reduce)').matches)return;
+  cv=document.createElement('canvas');cv.id='fx';document.body.appendChild(cv);const c=cv.getContext('2d');const dpr=devicePixelRatio||1;
+  let W,H;const fit=()=>{W=cv.width=innerWidth*dpr;H=cv.height=innerHeight*dpr;};fit();addEventListener('resize',fit);
+  const COLORS=['#F6BE00','#5EBDEB','#FF6A6A','#9FCC2E','#D2253C','#FFFFFF','#FFD24A'];
+  const best=wins[0].k, dur=best<=1?7000:best<=3?5000:3500, size=best<=1?110:best<=3?80:60;
+  const rockets=[],sparks=[];
+  const launch=side=>rockets.push({x:side?W*(0.82+Math.random()*0.16):W*(0.02+Math.random()*0.16),y:H,vx:(side?-1:1)*(1.5+Math.random()*2.5)*dpr,vy:-(H/62)*(0.9+Math.random()*0.25),c:COLORS[Math.random()*COLORS.length|0]});
+  const burst=r=>{for(let i=0;i<size;i++){const a=Math.PI*2*i/size,s=(2+Math.random()*4.5)*dpr;sparks.push({x:r.x,y:r.y,vx:Math.cos(a)*s,vy:Math.sin(a)*s,life:1,c:Math.random()<.35?COLORS[Math.random()*COLORS.length|0]:r.c});}};
+  const t0=performance.now();let last=0;
+  (function frame(t){if(stop)return;
+    if(t-t0<dur&&t-last>330){launch(0);launch(1);last=t;}
+    c.globalCompositeOperation='destination-out';c.fillStyle='rgba(0,0,0,.22)';c.fillRect(0,0,W,H);c.globalCompositeOperation='lighter';
+    for(let i=rockets.length-1;i>=0;i--){const r=rockets[i];r.x+=r.vx;r.y+=r.vy;r.vy+=0.18*dpr;c.fillStyle=r.c;c.beginPath();c.arc(r.x,r.y,2.6*dpr,0,7);c.fill();if(r.vy>=-1*dpr){burst(r);rockets.splice(i,1);}}
+    for(let i=sparks.length-1;i>=0;i--){const s=sparks[i];s.x+=s.vx;s.y+=s.vy;s.vx*=.985;s.vy=s.vy*.985+0.07*dpr;s.life-=0.012;if(s.life<=0){sparks.splice(i,1);continue;}c.globalAlpha=s.life;c.fillStyle=s.c;c.beginPath();c.arc(s.x,s.y,2.1*dpr,0,7);c.fill();c.globalAlpha=1;}
+    if(t-t0>dur&&!rockets.length&&!sparks.length){cv.remove();return;}
+    requestAnimationFrame(frame);})(t0);
+}
+setTimeout(celebrateWins,600);
 
 /* ---------- DRAWS ---------- */
 let chk=store.get('chk',[]);
