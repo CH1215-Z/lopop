@@ -183,6 +183,10 @@ a.btn{text-decoration:none;display:inline-block}
 .game.sub.win{background:linear-gradient(90deg,#FFF4CF,transparent);border-radius:8px}
 @media (prefers-color-scheme:dark){:root:not([data-theme="light"]) .game.sub.win{background:linear-gradient(90deg,rgba(232,178,30,.22),transparent)}}
 :root[data-theme="dark"] .game.sub.win{background:linear-gradient(90deg,rgba(232,178,30,.22),transparent)}
+.own-row{display:flex;align-items:center;gap:10px;justify-content:space-between;padding:9px 0;border-bottom:1px solid var(--line)}
+.own-row:last-child{border-bottom:0}
+.own-row .btn{flex:none;white-space:nowrap}
+.own-row .own-l{display:flex;flex-wrap:wrap;align-items:center;gap:6px 8px;min-width:0}
 .err{color:var(--slip-ink);background:var(--slip-soft);border-radius:8px;padding:10px 12px;font-size:14px}
 .empty{color:var(--muted);font-size:14px;padding:18px 0;text-align:center}
 .disclaim{font-size:12.5px;color:var(--muted);border-left:3px solid var(--slip);padding:4px 0 4px 12px;max-width:80ch}
@@ -427,6 +431,19 @@ footer{color:var(--faint);font-size:12.5px;padding-block:0 30px}
 
 <!-- ============ DRAWS ============ -->
 <section class="wrap" data-view="hist" hidden>
+  <div class="panel stack" id="ownPanel">
+    <div>
+      <h2>가지고 있는 번호 확인 <small id="ownSub"></small></h2>
+      <p class="lead">판매점이나 동행복권에서 산 번호를 넣으면 당첨 결과를 확인해 드려요. 이 브라우저에만 저장되고 히스토리와 통계에는 들어가지 않아요. 다음 회차가 발표되면 자동으로 지워져요.</p>
+    </div>
+    <div class="row">
+      <select id="ownRound" aria-label="회차"></select>
+      <input type="text" id="ownIn" inputmode="numeric" placeholder="예: 3 11 19 24 33 41" aria-label="번호 6개" style="flex:1 1 180px;min-width:0">
+      <button class="btn" id="ownAdd">확인</button>
+    </div>
+    <div class="mini" id="ownErr"></div>
+    <div id="ownOut"></div>
+  </div>
   <div class="panel stack" id="nickPanel">
     <div>
       <h2>닉네임으로 공유</h2>
@@ -1068,13 +1085,46 @@ if(SB_ON)syncShared();
 })();
 
 
+
+/* ---------- 가지고 있는 번호 확인 (이 브라우저에만, 다음 회차 발표 시 삭제) ---------- */
+let owned=store.get('owned',[]).filter(o=>o.r>=LAST.no);store.set('owned',owned);
+function renderOwned(){
+  const sel=$('#ownRound'),cur=sel.value;
+  sel.innerHTML=`<option value="${NEXT}">${NEXT}회 (${nextDate()} 추첨)</option><option value="${LAST.no}">${LAST.no}회 (결과 나옴)</option>`;
+  if(cur)sel.value=cur;
+  $('#ownSub').textContent=owned.length?`${owned.length}게임`:'';
+  const rows=owned.map((o,i)=>[o,i]).sort((a,b)=>b[0].r-a[0].r||a[1]-b[1]);
+  $('#ownOut').innerHTML=rows.length?rows.map(([o,i])=>{const d=D[o.r-1];let tag,bl;
+    if(!d){tag=`<span class="tag">${o.r}회 미추첨</span>`;bl=balls(o.n,'sm');}
+    else{const k=rankOf(o.n,d),m=o.n.filter(x=>d.n.includes(x)).length;
+      tag=k?`<span class="tag hot">${o.r}회 ${k}등 당첨</span>`:`<span class="tag">${o.r}회 낙첨 · ${m}개 일치</span>`;
+      bl=`<span class="balls">${o.n.map(n=>`<span class="ball sm b${band(n)}"${d.n.includes(n)||(k===2&&n===d.b)?'':' style="opacity:.28"'}>${n}</span>`).join('')}</span>`;}
+    return `<div class="own-row"><span class="own-l">${bl}${tag}</span><button class="btn ghost sm" data-owndel="${i}">삭제</button></div>`;}).join('')
+    :`<div class="empty" style="padding:6px 0">아직 넣은 번호가 없어요.</div>`;
+}
+function addOwned(){
+  const err=$('#ownErr');const nums=($('#ownIn').value.match(/\d+/g)||[]).map(Number);
+  const u=[...new Set(nums)].sort((a,b)=>a-b);
+  if(nums.length!==6||u.length!==6||u.some(n=>n<1||n>45)){err.innerHTML='<span style="color:var(--slip-ink)">1~45 사이 서로 다른 번호 6개를 넣어 주세요.</span>';return;}
+  if(owned.length>=20){err.innerHTML='<span style="color:var(--slip-ink)">한 번에 20게임까지 넣을 수 있어요.</span>';return;}
+  const r=+$('#ownRound').value;
+  if(owned.some(o=>o.r===r&&o.n.join()===u.join())){err.textContent='이미 넣은 번호예요.';return;}
+  const o={n:u,r};owned.push(o);store.set('owned',owned);$('#ownIn').value='';err.textContent='';renderOwned();
+  if(r===LAST.no)celebrateWins([o]);   // 이미 결과가 나온 회차면 바로 축하
+}
+$('#ownAdd').onclick=addOwned;$('#ownIn').onkeydown=e=>{if(e.key==='Enter')addOwned();};
+$('#ownOut').onclick=e=>{const b=e.target.closest('[data-owndel]');if(!b)return;owned.splice(+b.dataset.owndel,1);store.set('owned',owned);renderOwned();};
+
 /* ---------- 당첨 축하 (최신 회차 내 번호가 1~5등이면 한 번만) ---------- */
-function celebrateWins(){
-  const wins=saved.filter(s=>s.r===LAST.no).map(s=>({slot:s.slot,n:s.n,k:rankOf(s.n,LAST)})).filter(w=>w.k).sort((a,b)=>a.k-b.k||(a.slot??9)-(b.slot??9));
-  if(!wins.length||store.get('celebrated',0)===LAST.no)return;
-  store.set('celebrated',LAST.no);
+function celebrateWins(only){
+  const mine=saved.filter(s=>s.r===LAST.no).map(s=>({slot:s.slot,n:s.n,k:rankOf(s.n,LAST)}));
+  const own=(only||owned.filter(o=>o.r===LAST.no)).map(o=>({own:true,n:o.n,k:rankOf(o.n,LAST)}));
+  const wins=(only?own:mine.concat(own)).filter(w=>w.k).sort((a,b)=>a.k-b.k||(a.own?1:0)-(b.own?1:0)||(a.slot??9)-(b.slot??9));
+  if(!wins.length)return;
+  if(!only){if(store.get('celebrated',0)===LAST.no)return;store.set('celebrated',LAST.no);}
+  document.querySelectorAll('.congrats,#fx').forEach(x=>x.remove());
   const box=document.createElement('div');box.className='congrats';box.setAttribute('role','status');
-  box.innerHTML=`<div class="cg-t">당첨을 축하드립니다!</div><div class="cg-s">${LAST.no}회 · 내 번호 ${wins.length}게임 당첨</div>${wins.map(w=>`<div class="cg-row"><span class="gl">${w.slot!=null?String.fromCharCode(65+w.slot):'·'}</span><span class="cg-b">${w.n.map(n=>`<span class="ball xs b${band(n)}">${n}</span>`).join('')}</span><span class="cg-rank">${w.k}등</span></div>`).join('')}<button class="btn ghost sm" id="cgClose">닫기</button>`;
+  box.innerHTML=`<div class="cg-t">당첨을 축하드립니다!</div><div class="cg-s">${LAST.no}회 · ${wins.length}게임 당첨</div>${wins.map(w=>`<div class="cg-row"><span class="gl">${w.own?'보유':w.slot!=null?String.fromCharCode(65+w.slot):'·'}</span><span class="cg-b">${w.n.map(n=>`<span class="ball xs b${band(n)}">${n}</span>`).join('')}</span><span class="cg-rank">${w.k}등</span></div>`).join('')}<button class="btn ghost sm" id="cgClose">닫기</button>`;
   document.body.appendChild(box);
   let stop=false,cv=null;
   box.querySelector('#cgClose').onclick=()=>{box.remove();stop=true;if(cv)cv.remove();};
@@ -1139,9 +1189,9 @@ function openTab(t){if(!TABS.includes(t))t='rank';
     if(t==='pattern'){renderRules();renderMult();renderAllMult();renderDM();renderDQ();renderDec();renderCombos();renderDist();}
     if(t==='pick'){fillComboSel();renderModes();paintSlip();renderOddSel();renderSaved();computeCoverage();}
     if(t==='draws'){renderChk();renderDraws();}
-    if(t==='hist'){renderHist();renderNick();}
+    if(t==='hist'){renderOwned();renderHist();renderNick();}
     if(t==='people')loadPeople();
-  } else if(t==='pattern')renderRules(); else if(t==='pick')computeCoverage(); else if(t==='people')loadPeople(); else if(t==='hist')renderNick();
+  } else if(t==='pattern')renderRules(); else if(t==='pick')computeCoverage(); else if(t==='people')loadPeople(); else if(t==='hist'){renderOwned();renderNick();}
   store.set('tab',t);}
 document.querySelector('nav.tabs').onclick=e=>{const b=e.target.closest('[data-tab]');if(b){openTab(b.dataset.tab);try{history.replaceState(null,'','#'+b.dataset.tab);}catch(err){}}};
 const h0=(location.hash||'').slice(1);openTab(TABS.includes(h0)?h0:store.get('tab','rank'));
