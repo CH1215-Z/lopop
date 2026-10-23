@@ -296,6 +296,13 @@ footer{color:var(--faint);font-size:12.5px;padding-block:0 30px}
 <section class="wrap" data-view="pattern" hidden>
   <div class="panel stack">
     <div>
+      <h2>1게임당 당첨 확률</h2>
+      <p class="lead">어떤 번호를 고르든 1게임(1,000원)으로 당첨될 확률은 똑같아요.</p>
+    </div>
+    <div class="vs" id="oddsBox" style="grid-template-columns:repeat(auto-fit,minmax(min(100%,120px),1fr))"></div>
+  </div>
+  <div class="panel stack">
+    <div>
       <h2>패턴별 당첨 확률</h2>
       <p class="lead">패턴을 고르면, 지금까지 당첨번호가 그 패턴이었던 비율과, 그 패턴에 해당하는 조합을 전부 샀을 때 1등이 될 확률을 보여 줘요. 확률은 가능한 조합 8,145,060개를 전부 따져서 구했어요. 이 패턴으로 몇 게임만 사면 당첨 확률은 다른 번호와 똑같이 게임당 8,145,060분의 1이에요. 여기서 고른 패턴은 번호 뽑기의 "선택한 패턴으로 뽑기"에 그대로 쓰여요.</p>
     </div>
@@ -681,6 +688,12 @@ seg($('#rankSort'),[['num','번호순'],['freq','많이 나온 순']],rk.sort,v=
 $('#rankBonus').onchange=e=>{rk.bonus=e.target.checked;renderRank();};
 
 /* ---------- PATTERN ---------- */
+function renderOdds(){
+  const W=[[1,'6개 일치',1],[2,'5개 + 보너스',6],[3,'5개 일치',228],[4,'4개 일치',11115],[5,'3개 일치',182780]];
+  const cell=(k,sub,w)=>{const p=w/TOTAL,inv=TOTAL/w;const invT=inv>=10000?fmt(Math.round(inv)):inv>=100?fmt(Math.round(inv)):inv.toFixed(1);
+    return `<div class="cell"><span class="k">${k} <span style="font-weight:400">· ${sub}</span></span><span class="v" style="font-size:17px;white-space:nowrap">${invT}분의 1</span><span class="d">${p*100<0.01?(p*100).toPrecision(3):(p*100).toFixed(2)}%</span></div>`;};
+  $('#oddsBox').innerHTML=W.map(([k,s,w])=>cell(k+'등',s,w)).join('')+cell('아무 등수나','5등 이상',W.reduce((a,x)=>a+x[2],0));
+}
 function renderRules(){
   $('#ruleChips').innerHTML=RULES.map(r=>{const t=bucketSum(m=>m&(1<<r.id))/TOTAL;return `<button type="button" class="chip" data-r="${r.id}" aria-pressed="${selRules.has(r.id)}" data-tip="${r.desc}\n이론 확률 ${pct(t,2)}">${r.name}</button>`;}).join('');
   const sel=selMask();
@@ -1414,7 +1427,7 @@ function openTab(t){if(!TABS.includes(t))t='rank';
   document.querySelectorAll('nav.tabs button').forEach(b=>b.setAttribute('aria-selected',b.dataset.tab===t));
   if(!rendered[t]){rendered[t]=1;
     if(t==='rank')renderRank();
-    if(t==='pattern'){renderRules();renderMult();renderAllMult();renderDM();renderDQ();renderDec();renderCombos();renderDist();}
+    if(t==='pattern'){renderOdds();renderRules();renderMult();renderAllMult();renderDM();renderDQ();renderDec();renderCombos();renderDist();}
     if(t==='pick'){fillComboSel();renderModes();paintSlip();renderOddSel();renderSaved();computeCoverage();}
     if(t==='draws'){renderChk();renderDraws();}
     if(t==='hist'){renderLink();renderOwned();renderHist();renderNick();}
