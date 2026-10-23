@@ -912,8 +912,7 @@ $('#saveAll').onclick=saveAll;
 const savedRaw=store.get('saved',[]).map(x=>Array.isArray(x)?{n:x,r:LAST.no+1}:x);
 let hist=store.get('history',[]);
 let confirmed=store.get('confirmed',null),migrated=false;
-if(confirmed===null){ // 처음 한 번: 예전 내 번호를 저장된 번호로 옮김
-  confirmed=savedRaw.filter(s=>s.r>=LAST.no&&s.slot!=null&&s.slot<5).map(s=>({n:s.n,r:s.r,slot:s.slot,t:s.t||0}));migrated=true;}
+if(confirmed===null)confirmed=[]; // 예전 내 번호는 그대로 내 번호에 둠 (자동으로 옮기지 않음)
 (()=>{const keys=new Set(hist.map(h=>h.r+'|'+(h.slot??'')+'|'+h.n.join(',')));let add=false;
   confirmed.filter(s=>s.r<=LAST.no).forEach(s=>{const k=s.r+'|'+(s.slot??'')+'|'+s.n.join(',');if(!keys.has(k)){keys.add(k);hist.push({n:s.n.slice(),r:s.r,slot:s.slot});add=true;}});
   if(add)store.set('history',hist);})();
@@ -937,12 +936,15 @@ function renderSaved(){
   freshKeys=new Set();
   renderConfirmed();
 }
+let editIdx=-1;
 function renderConfirmed(){
   const open=Date.now()<closeAt(NEXT).getTime();
   const cn=confirmed.map((c,i)=>[c,i]).filter(([c])=>c.r===NEXT).sort((a,b)=>a[0].slot-b[0].slot);
   const cl=confirmed.map((c,i)=>[c,i]).filter(([c])=>c.r===LAST.no).sort((a,b)=>a[0].slot-b[0].slot);
   $('#confSub').textContent=`${NEXT}회 · ${cn.length}/${MAXC}게임`;
-  let html=cn.map(([c,i],p)=>`<div class="own-row"><span class="own-l"><span class="gl">${(c.slot??p)+1}</span>${balls(c.n,'sm')}<span class="tag">${NEXT}회 미추첨</span></span>${open?`<button class="btn ghost sm" data-cdel="${i}">취소</button>`:''}</div>`).join('');
+  let html=cn.map(([c,i],p)=>{const L=`<span class="gl">${(c.slot??p)+1}</span>`;
+    if(editIdx===i)return `<div class="own-row"><span class="own-l">${L}<input type="text" id="confEditIn" inputmode="numeric" value="${c.n.join(' ')}" aria-label="번호 6개" style="flex:1 1 160px;min-width:0"><span class="res-line"><span class="mini" id="confEditErr">번호 6개를 띄어 써서 고쳐 주세요.</span><span class="row" style="gap:4px"><button class="btn sm" data-cedit-ok="${i}">수정 완료</button><button class="btn ghost sm" data-cedit-no="1">그만두기</button></span></span></span></div>`;
+    return `<div class="own-row"><span class="own-l">${L}<span class="balls" style="flex-wrap:nowrap">${c.n.map(n=>`<span class="ball sm b${band(n)}">${n}</span>`).join('')}</span><span class="res-line"><span class="tag">${NEXT}회 미추첨</span>${open?`<span class="row" style="gap:4px"><button class="btn ghost sm" data-cedit="${i}">수정</button><button class="btn ghost sm" data-cback="${i}" title="저장을 풀고 내 번호로 되돌리기">내 번호로</button><button class="btn ghost sm" data-cdel="${i}">취소</button></span>`:''}</span></span></div>`;}).join('');
   if(!cn.length)html=`<div class="empty" style="padding:6px 0">아직 저장한 번호가 없어요. 내 번호를 뽑고 <b>번호 전체 저장</b>을 누르세요.</div>`;
   if(cl.length){const d=LAST;
     html+=`<div class="mini" style="margin-top:12px;font-weight:600">${LAST.no}회 결과</div>`+cl.map(([c,i])=>{const k=rankOf(c.n,d),m=c.n.filter(x=>d.n.includes(x)).length;
@@ -969,6 +971,19 @@ document.addEventListener('click',e=>{
   const s=e.target.closest('[data-save]');if(s){const a=s.dataset.save.split(',').map(Number);if(!saved.some(x=>x.r===LAST.no+1&&x.n.join()===a.join())){saved.unshift({n:a,r:LAST.no+1});store.set('saved',saved);renderSaved();}s.textContent='저장됨';s.disabled=true;return;}
   const rd=e.target.closest('[data-redo]');if(rd){const s=saved[+rd.dataset.redo];if(s){saved=saved.filter(x=>!(x.r===NEXT&&x.slot===s.slot));s.r=NEXT;s.t=Date.now();freshKeys=new Set([s.n.join(',')]);store.set('saved',saved);renderSaved();}return;}
   const d=e.target.closest('[data-del]');if(d){const s=saved[+d.dataset.del];if(s){saved=saved.filter(x=>x!==s);store.set('saved',saved);renderSaved();}return;}
+  const ce=e.target.closest('[data-cedit]');if(ce){editIdx=+ce.dataset.cedit;renderConfirmed();const inp=$('#confEditIn');if(inp){inp.focus();inp.select();inp.onkeydown=ev=>{if(ev.key==='Enter')$(`[data-cedit-ok="${editIdx}"]`).click();if(ev.key==='Escape'){editIdx=-1;renderConfirmed();}};}return;}
+  if(e.target.closest('[data-cedit-no]')){editIdx=-1;renderConfirmed();return;}
+  const ck2=e.target.closest('[data-cedit-ok]');if(ck2){const i=+ck2.dataset.ceditOk,c=confirmed[i],err=$('#confEditErr');if(!c)return;
+    if(Date.now()>=closeAt(NEXT).getTime()){err.innerHTML='<span style="color:var(--slip-ink)">판매가 마감돼서 고칠 수 없어요.</span>';return;}
+    const nums=($('#confEditIn').value.match(/\d+/g)||[]).map(Number),u=[...new Set(nums)].sort((a,b)=>a-b);
+    if(nums.length!==6||u.length!==6||u.some(n=>n<1||n>45)){err.innerHTML='<span style="color:var(--slip-ink)">1~45 사이 서로 다른 번호 6개를 넣어 주세요.</span>';return;}
+    if(confirmed.some(x=>x!==c&&x.r===NEXT&&x.n.join()===u.join())){err.innerHTML='<span style="color:var(--slip-ink)">이미 저장한 번호예요.</span>';return;}
+    c.n=u;c.t=Date.now();editIdx=-1;store.set('confirmed',confirmed);renderConfirmed();return;}
+  const cb=e.target.closest('[data-cback]');if(cb){const c=confirmed[+cb.dataset.cback];if(!c)return;const msg=$('#genMsg');
+    const used=new Set(curIdx().map(i=>saved[i].slot));const free=[0,1,2,3,4].find(x=>!used.has(x));
+    if(free==null){msg.innerHTML='<div class="err">내 번호 칸(A~E)이 가득 찼어요. 내 번호를 하나 지운 뒤 다시 눌러 주세요.</div>';return;}
+    saved.push({n:c.n.slice(),r:NEXT,slot:free,t:Date.now()});confirmed=confirmed.filter(x=>x!==c);
+    store.set('saved',saved);store.set('confirmed',confirmed);msg.innerHTML=`<div class="ok-box">내 번호 ${String.fromCharCode(65+free)} 자리로 되돌렸어요.</div>`;renderSaved();return;}
   const cd=e.target.closest('[data-cdel]');if(cd){const c=confirmed[+cd.dataset.cdel];if(c){if(c.r===NEXT&&Date.now()>=closeAt(NEXT).getTime())return;confirmed=confirmed.filter(x=>x!==c);store.set('confirmed',confirmed);renderConfirmed();}return;}
   const cr=e.target.closest('[data-credo]');if(cr){const c=confirmed[+cr.dataset.credo];if(!c)return;const cn=confirmed.filter(x=>x.r===NEXT);const msg=$('#genMsg');
     if(cn.length>=MAXC){msg.innerHTML='<div class="err">저장 칸이 가득 찼어요. 저장된 번호를 하나 취소한 뒤 다시 눌러 주세요.</div>';return;}
