@@ -367,8 +367,8 @@ footer{color:var(--faint);font-size:12.5px;padding-block:0 30px}
   </div>
   <div class="panel stack">
     <div>
-      <h2>패턴 2개 이상 + 배수 조합 TOP 5</h2>
-      <p class="lead">패턴 규칙 2~3개가 모두 들어가고, 2·3·4·5 중 한 수의 배수가 정확히 몇 개인 조합을 전부(3,000가지 이상) 따져서 확률이 가장 높은 5개를 골랐어요. "이어진 번호 있음"과 "세 개 이상 이어짐", "끝자리 같은 번호 2개 이상"과 "3개 이상"은 서로 겹치는 규칙이라 함께 묶지 않았어요.</p>
+      <h2>패턴 + 배수 추천 조합</h2>
+      <p class="lead">패턴 여러 개가 모두 들어가고, 2·3·4·5 중 한 수의 배수가 정확히 몇 개인 경우를 전부 따져서, 패턴 2개 이상·3개 이상·4개 이상으로 나눠 각각 확률이 가장 높은 2개씩 골랐어요. 서로 겹치는 규칙("이어진 번호 있음"과 "세 개 이상 이어짐", "끝자리 같은 번호 2개 이상"과 "3개 이상")은 함께 묶지 않았어요.</p>
     </div>
     <div class="row"><span class="ctl-label">순위 기준</span><div class="seg" id="comboBy"></div></div>
     <div class="tbl-wrap"><table id="comboTbl"></table></div>
@@ -389,7 +389,7 @@ footer{color:var(--faint);font-size:12.5px;padding-block:0 30px}
         </div>
       </div>
       <div class="opt">
-        <h3>추천 조합 <span class="hint" style="font-weight:400">(패턴 2개 이상 + 배수 TOP 5)</span></h3>
+        <h3>추천 조합 <span class="hint" style="font-weight:400">(패턴 2·3·4개 이상 + 배수, 각 TOP 2)</span></h3>
         <select id="comboSel" aria-label="추천 조합"></select>
         <div class="hint" id="comboHint">고르면 패턴과 배수 조건이 자동으로 설정돼요.</div>
       </div>
@@ -1028,29 +1028,32 @@ $('#copyGen').onclick=e=>{const g=curIdx().map(i=>saved[i]);if(g.length)copyText
 
 /* ---------- 패턴 + 배수 조합 ---------- */
 let comboBy=store.get('comboby','act');const comboCache={};
-function topCombos(by){
+const COMBO_GROUPS=[{min:2,label:'패턴 2개 이상 + 배수'},{min:3,label:'패턴 3개 이상 + 배수'},{min:4,label:'패턴 4개 이상 + 배수'}];
+function topCombos(by){ // 그룹별 TOP 2를 한 줄로 이어 붙인 목록 (각 항목에 g = 그룹 번호)
   if(comboCache[by])return comboCache[by];
-  const sets=[];for(let a=0;a<9;a++)for(let b=a+1;b<9;b++){sets.push([a,b]);for(let c=b+1;c<9;c++)sets.push([a,b,c]);}
+  const sets=[];const rec=(start,cur)=>{if(cur.length>=2)sets.push(cur.slice());if(cur.length===5)return;for(let r=start;r<9;r++){cur.push(r);rec(r+1,cur);cur.pop();}};rec(0,[]);
   const mcs={};for(const k of [2,3,4,5])mcs[k]=D.map(d=>d.n.filter(x=>x%k===0).length);
-  const list=[];
+  const all=[];
   for(const rs of sets){if((rs.includes(0)&&rs.includes(1))||(rs.includes(3)&&rs.includes(8)))continue;const sel=rs.reduce((x,y)=>x|(1<<y),0);
     const idx=[];D.forEach((d,i)=>{if((d.m&sel)===sel)idx.push(i);});
     for(const k of [2,3,4,5])for(let m=0;m<=6;m++){
       let th=0;for(let mk=0;mk<512;mk++)if((mk&sel)===sel)th+=MM[k][mk*7+m];
       if(!th)continue;
-      const act=idx.filter(i=>mcs[k][i]===m).length;
-      list.push({rules:rs,k,m,act,th:th/TOTAL,combos:th});}}
-  list.sort(by==='act'?(a,b)=>b.act-a.act||b.th-a.th:(a,b)=>b.th-a.th||b.act-a.act);
-  return comboCache[by]=list.slice(0,5);
+      let act=0;for(const i of idx)if(mcs[k][i]===m)act++;
+      all.push({rules:rs,k,m,act,th:th/TOTAL,combos:th});}}
+  const cmp=by==='act'?(a,b)=>b.act-a.act||b.th-a.th:(a,b)=>b.th-a.th||b.act-a.act;
+  all.sort(cmp);
+  const out=[];COMBO_GROUPS.forEach((g,gi)=>all.filter(c=>c.rules.length>=g.min).slice(0,2).forEach(c=>out.push(Object.assign({g:gi},c))));
+  return comboCache[by]=out;
 }
 const comboName=c=>c.rules.map(r=>RULES[r].name).join(' + ');
 const comboMul=c=>`${c.k}의 배수 ${c.m}개`;
 function renderCombos(){
   const top=topCombos(comboBy);
-  $('#comboTbl').innerHTML=`<tr><th>순위</th><th>패턴 조합</th><th>배수 조건</th><th class="r">실제 당첨 비율</th><th class="r">이론 확률</th><th></th></tr>`+top.map((c,i)=>`<tr><td class="num">${i+1}</td><td style="white-space:normal;min-width:200px">${comboName(c)}</td><td>${comboMul(c)}</td><td class="r num">${pct(c.act/N,2)} <span style="color:var(--faint)">(${c.act}회)</span></td><td class="r num">${pct(c.th,2)}</td><td><button class="btn ghost" data-combo="${i}" style="padding:4px 10px;font-size:12.5px">이 조합으로 뽑기</button></td></tr>`).join('');
+  $('#comboTbl').innerHTML=`<tr><th>순위</th><th>패턴 조합</th><th>배수 조건</th><th class="r">실제 당첨 비율</th><th class="r">이론 확률</th><th></th></tr>`+COMBO_GROUPS.map((g,gi)=>`<tr><td colspan="6" style="background:var(--panel-2);font-weight:700;font-size:13px">${g.label} TOP 2</td></tr>`+top.map((c,i)=>[c,i]).filter(([c])=>c.g===gi).map(([c,i],r)=>`<tr><td class="num">${r+1}</td><td style="white-space:normal;min-width:200px">${comboName(c)}</td><td>${comboMul(c)}</td><td class="r num">${pct(c.act/N,2)} <span style="color:var(--faint)">(${c.act}회)</span></td><td class="r num">${pct(c.th,2)}</td><td><button class="btn ghost" data-combo="${i}" style="padding:4px 10px;font-size:12.5px">이 조합으로 뽑기</button></td></tr>`).join('')).join('');
 }
-function fillComboSel(){const top=topCombos(comboBy);const cur=store.get('combosel','');
-  $('#comboSel').innerHTML=`<option value="">선택 안 함</option>`+top.map((c,i)=>`<option value="${i}">${i+1}위 · ${comboName(c)} · ${comboMul(c)} (실제 ${pct(c.act/N,1)})</option>`).join('');
+function fillComboSel(){const top=topCombos(comboBy);const cur=store.get('combosel2','');
+  $('#comboSel').innerHTML=`<option value="">선택 안 함</option>`+COMBO_GROUPS.map((g,gi)=>`<optgroup label="${g.label} TOP 2">${top.map((c,i)=>[c,i]).filter(([c])=>c.g===gi).map(([c,i],r)=>`<option value="${i}">${r+1}위 · ${comboName(c)} · ${comboMul(c)} (실제 ${pct(c.act/N,1)})</option>`).join('')}</optgroup>`).join('');
   $('#comboSel').value=cur!==''&&top[+cur]?cur:'';}
 function applyCombo(i){
   const c=topCombos(comboBy)[i];if(!c)return;
@@ -1059,13 +1062,13 @@ function applyCombo(i){
   renderRules();
   G.usePat=true;G.mK=c.k;G.mOp='eq';G.mN=c.m;saveG();
   $('#avoidPat').checked=true;$('#mK').value=c.k;$('#mOp').value='eq';$('#mN').value=c.m;syncM();
-  store.set('combosel',String(i));fillComboSel();
+  store.set('combosel2',String(i));fillComboSel();
   $('#comboHint').innerHTML=`적용됨: <b style="color:var(--slip-ink)">${comboName(c)}</b> · <b style="color:var(--slip-ink)">${comboMul(c)}</b>`;
   updateCoverage();
 }
 seg($('#comboBy'),[['act','실제 당첨 비율'],['th','이론 확률']],comboBy,v=>{comboBy=v;store.set('comboby',v);renderCombos();fillComboSel();});
 $('#comboTbl').onclick=e=>{const b=e.target.closest('[data-combo]');if(!b)return;openTab('pick');try{history.replaceState(null,'','#pick');}catch(err){}applyCombo(+b.dataset.combo);generate();window.scrollTo({top:0,behavior:'smooth'});};
-$('#comboSel').onchange=e=>{if(e.target.value===''){store.set('combosel','');$('#comboHint').textContent='고르면 패턴과 배수 조건이 자동으로 설정돼요.';return;}applyCombo(+e.target.value);};
+$('#comboSel').onchange=e=>{if(e.target.value===''){store.set('combosel2','');$('#comboHint').textContent='고르면 패턴과 배수 조건이 자동으로 설정돼요.';return;}applyCombo(+e.target.value);};
 
 
 /* ---------- HISTORY ---------- */
