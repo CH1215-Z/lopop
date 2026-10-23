@@ -920,12 +920,18 @@ setTimeout(showNudge,900);
 const savedRaw=store.get('saved',[]).map(x=>Array.isArray(x)?{n:x,r:LAST.no+1}:x);
 let hist=store.get('history',[]);
 let confirmed=store.get('confirmed',null),migrated=false;
-if(confirmed===null)confirmed=[]; // 예전 내 번호는 그대로 내 번호에 둠 (자동으로 옮기지 않음)
+// 저장 기능이 생기기 전(2026-10-23 16:50 이전)에 뽑아 둔 1247회까지의 내 번호는 예전 규칙대로 저장된 번호로 인정
+// (그 뒤에 뽑은 내 번호는 연습장이라 옮기지 않음)
+const LEGACY_BEFORE=Date.parse('2026-10-23T07:50:00Z'),LEGACY_LAST_ROUND=1247;let legacy=new Set();
+if(confirmed===null){
+  const leg=savedRaw.filter(s=>s.r>=LAST.no&&s.r<=LEGACY_LAST_ROUND&&s.slot!=null&&s.slot<5&&(!s.t||s.t<LEGACY_BEFORE));
+  legacy=new Set(leg);confirmed=leg.map(s=>({n:s.n.slice(),r:s.r,slot:s.slot,t:s.t||0}));migrated=leg.length>0;
+}
 (()=>{const keys=new Set(hist.map(h=>h.r+'|'+(h.slot??'')+'|'+h.n.join(',')));let add=false;
   confirmed.filter(s=>s.r<=LAST.no).forEach(s=>{const k=s.r+'|'+(s.slot??'')+'|'+s.n.join(',');if(!keys.has(k)){keys.add(k);hist.push({n:s.n.slice(),r:s.r,slot:s.slot});add=true;}});
   if(add)store.set('history',hist);})();
 confirmed=confirmed.filter(c=>c.r>=LAST.no);store.set('confirmed',confirmed);
-let saved=migrated?[]:savedRaw.filter(s=>s.r===NEXT);if(migrated)store.set('saved',saved);
+let saved=savedRaw.filter(s=>s.r===NEXT&&!legacy.has(s));if(migrated)store.set('saved',saved);
 const MAXC=5;
 (()=>{const by={};saved.forEach(s=>{(by[s.r]=by[s.r]||[]).push(s);});Object.values(by).forEach(g=>{const used=new Set(g.filter(s=>s.slot!=null).map(s=>s.slot));let f=0;g.forEach(s=>{if(s.slot==null){while(used.has(f))f++;if(f<MAXG){s.slot=f;used.add(f);}}});});store.set('saved',saved);})();
 {const nd=$('#nextDraw');if(nd)nd.textContent=`${LAST.no+1}회 · ${nextDate()} 토`;}
