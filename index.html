@@ -958,7 +958,7 @@ function roundsHTML(list){
 
 /* ---------- 공유 (Supabase) ---------- */
 const SB_ON=!!(SB.url&&SB.key);
-const sbHead={apikey:SB.key,Authorization:'Bearer '+SB.key,'Content-Type':'application/json'};
+const sbHead={apikey:SB.key,'Content-Type':'application/json'}; // publishable·anon 키 모두 apikey 헤더로만 보냄
 async function sbGet(q){const r=await fetch(`${SB.url}/rest/v1/${q}`,{headers:sbHead});if(!r.ok)throw new Error('목록을 불러오지 못했어요');return r.json();}
 async function sbRpc(fn,body){const r=await fetch(`${SB.url}/rest/v1/rpc/${fn}`,{method:'POST',headers:sbHead,body:JSON.stringify(body)});const txt=await r.text();let j=null;try{j=txt?JSON.parse(txt):null;}catch(e){}if(!r.ok)throw new Error((j&&j.message)||'서버에 저장하지 못했어요');return j;}
 const myKey=(()=>{let k=store.get('key','');if(!/^[A-Za-z0-9_-]{16,64}$/.test(k)){const a=new Uint8Array(24);crypto.getRandomValues(a);k=Array.from(a,b=>'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_'[b%64]).join('');store.set('key',k);}return k;})();
