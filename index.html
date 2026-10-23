@@ -1088,6 +1088,15 @@ if(SB_ON)syncShared();
 
 /* ---------- 가지고 있는 번호 확인 (이 브라우저에만, 다음 회차 발표 시 삭제) ---------- */
 let owned=store.get('owned',[]).filter(o=>o.r>=LAST.no);store.set('owned',owned);
+function ownStats(a){
+  const x=maskOf(a);const P=v=>(v*100).toFixed(1)+'%';
+  const h=pastResults(a);const won=[1,2,3,4,5].filter(k=>h.r[k]).map(k=>`${k}등 ${h.r[k]}`).join('·')||'당첨 없음';
+  const odd=D.filter(d=>d.odd===x.odd).length/N;
+  const dk=x.dc.join('-');const dec=D.filter(d=>d.dc.join('-')===dk).length/N;
+  const lo=Math.floor(x.s/20)*20,hi=lo+19;const sum=D.filter(d=>d.s>=lo&&d.s<=hi).length/N;
+  const runK=x.maxRun>=3?2:x.maxRun-1;const run=D.filter(d=>(d.maxRun>=3?2:d.maxRun-1)===runK).length/N;
+  return `과거 ${fmt(N)}회 대입 ${won} · 홀${x.odd}:짝${6-x.odd} ${P(odd)} · 번호대 ${dk} ${P(dec)} · 합 ${x.s}(${lo}~${hi} 구간 ${P(sum)}) · ${['연번 없음','2연속','3연속 이상'][runK]} ${P(run)}`;
+}
 function renderOwned(){
   const sel=$('#ownRound'),cur=sel.value;
   sel.innerHTML=`<option value="${NEXT}">${NEXT}회 (${nextDate()} 추첨)</option><option value="${LAST.no}">${LAST.no}회 (결과 나옴)</option>`;
@@ -1099,7 +1108,7 @@ function renderOwned(){
     else{const k=rankOf(o.n,d),m=o.n.filter(x=>d.n.includes(x)).length;
       tag=k?`<span class="tag hot">${o.r}회 ${k}등 당첨</span>`:`<span class="tag">${o.r}회 낙첨 · ${m}개 일치</span>`;
       bl=`<span class="balls">${o.n.map(n=>`<span class="ball sm b${band(n)}"${d.n.includes(n)||(k===2&&n===d.b)?'':' style="opacity:.28"'}>${n}</span>`).join('')}</span>`;}
-    return `<div class="own-row"><span class="own-l">${bl}${tag}</span><button class="btn ghost sm" data-owndel="${i}">삭제</button></div>`;}).join('')
+    return `<div class="own-row"><span class="own-l">${bl}${tag}<span class="mini" style="flex-basis:100%">${ownStats(o.n)}</span></span><button class="btn ghost sm" data-owndel="${i}">삭제</button></div>`;}).join('')
     :`<div class="empty" style="padding:6px 0">아직 넣은 번호가 없어요.</div>`;
 }
 function addOwned(){
