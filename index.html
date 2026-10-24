@@ -1113,6 +1113,7 @@ function roundsHTML(list,title){
     const head=d?`<b>${r}회 <span style="font-weight:400;color:var(--muted);font-size:13px">${dateK(d.date)}</span>${title&&rows[0].nick&&rows[0].nick!==title?` <span class="tag" title="이 회차 때 닉네임">${esc(rows[0].nick)}</span>`:''}</b><span class="balls">${d.n.map(n=>ball(n,'xs')).join('')}<span class="plus">+</span>${ball(d.b,'xs')}</span>`:`<b>${r}회 <span style="font-weight:400;color:var(--muted);font-size:13px">추첨 전</span></b>`;
     return `<div class="stack" style="gap:6px;padding:14px 0;border-top:1px solid var(--line)">
       <div class="row" style="justify-content:space-between">${head}</div>
+      ${rows[0].why?`<div class="mini">이번 회차 방식: ${esc(rows[0].why)}</div>`:''}
       ${rows.map(h=>{const L=`<span class="gl">${h.slot!=null?h.slot+1:'·'}</span>`;
         if(!d)return `<div class="row" style="gap:8px">${L}${balls(h.n,'sm')}<span class="tag">미추첨</span></div>`;
         const k=rankOf(h.n,d);const m=h.n.filter(x=>d.n.includes(x)).length;
@@ -1143,6 +1144,7 @@ const esc=s=>String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'
 async function setNick(){
   const v=$('#nickIn').value.trim();const err=$('#nickErr');
   if(v.length<1||v.length>12){err.innerHTML='<span style="color:var(--slip-ink)">닉네임은 1~12자로 정해 주세요.</span>';return;}
+  if(v.replace(/[^가-힣a-z]/gi,'').includes(BOT_NAME)){err.innerHTML='<span style="color:var(--slip-ink)">봇 이름과 헷갈리는 닉네임은 쓸 수 없어요.</span>';return;}
   err.textContent='저장 중…';
   try{await sbRpc('set_nickname',{p_key:myKey,p_nickname:v});nick=v;store.set('nick',v);syncState='';people=null;renderNick();syncShared();}
   catch(e){err.innerHTML=`<span style="color:var(--slip-ink)">${esc(e.message)}</span>`;}
@@ -1175,18 +1177,57 @@ async function syncShared(){
   }catch(e){syncState=`공유하지 못했어요: ${e.message}`;}
   if(!$('[data-view="hist"]').hidden)renderNick();
 }
+// ── 무작위봇: 봇 5개가 매 회차 뽑는 방식·패턴·홀짝을 무작위로 정해 5게임씩 뽑음.
+// 회차+봇 번호로 난수를 고정하고 그 회차 이전 기록만 쓰므로 누가 언제 봐도 같은 번호가 나옴.
+// 주의: 지난 회차 봇 번호가 바뀌지 않도록 이 부분 로직은 고치지 마세요.
+const BOT_START=1248,BOT_N=5,BOT_NAME='무작위봇';
+function botRng(seed){let h=1779033703^seed.length;for(let i=0;i<seed.length;i++){h=Math.imul(h^seed.charCodeAt(i),3432918353);h=h<<13|h>>>19;}
+  let a=h>>>0;return()=>{a=a+0x6D2B79F5|0;let t=Math.imul(a^a>>>15,1|a);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296;};}
+const BOT_MODE_NAME={uniform:'완전 무작위',hot:'많이 나온 번호 우선',cold:'적게 나온 번호 우선',gap:'오래 안 나온 번호 우선'};
+const botCache=new Map();
+function botRound(bot,r){
+  const ck=bot+':'+r;if(botCache.has(ck))return botCache.get(ck);
+  const rnd=botRng(`lopop-bot:${bot}:${r}`);const pick=arr=>arr[Math.floor(rnd()*arr.length)];
+  const past=D.slice(0,r-1);
+  const mode=pick(['uniform','hot','cold','gap']),base=pick(['all','100','50']),str=1+Math.floor(rnd()*5);
+  const nPat=pick([0,0,1,1,2]);const pats=[];while(pats.length<nPat){const id=Math.floor(rnd()*9);if(!pats.includes(id))pats.push(id);}pats.sort((x,y)=>x-y);
+  let odd=pick([null,null,2,3,4]);
+  const w=new Array(46).fill(1);
+  if(mode!=='uniform'){
+    const sub=base==='all'?past:past.slice(-Number(base));const cnt=new Array(46).fill(0),seen=new Array(46).fill(0);
+    sub.forEach(d=>d.n.forEach(x=>cnt[x]++));past.forEach(d=>d.n.forEach(x=>seen[x]=d.no));const mean=sub.length*6/45;
+    for(let n=1;n<=45;n++)w[n]=mode==='hot'?Math.pow((cnt[n]+0.5)/mean,str*1.2):mode==='cold'?Math.pow(mean/(cnt[n]+0.5),str*1.2):Math.pow((r-1-seen[n]+1)/7.5,str*0.45);
+  }
+  const won=new Set(past.map(d=>d.n.join(',')));let sel=0;pats.forEach(id=>sel|=1<<id);
+  const draw=useW=>{const idx=[];for(let n=1;n<=45;n++)idx.push(n);const out=[];
+    for(let j=0;j<6;j++){let k=0;if(useW){let tot=0;idx.forEach(n=>tot+=w[n]);let t=rnd()*tot;while(t>=w[idx[k]]&&k<idx.length-1){t-=w[idx[k]];k++;}}else k=Math.floor(rnd()*idx.length);out.push(idx[k]);idx.splice(k,1);}
+    return out.sort((x,y)=>x-y);};
+  const games=[],keys=new Set();
+  const ok=(a,strict)=>{const k=a.join(',');if(keys.has(k)||won.has(k))return false;if(!strict)return true;const x=maskOf(a);return (x.m&sel)===sel&&(odd==null||x.odd===odd);};
+  for(let t=0;t<60000&&games.length<5;t++){const a=draw(mode!=='uniform'&&t<30000);if(ok(a,true)){keys.add(a.join(','));games.push(a);}}
+  if(games.length<5){pats.length=0;odd=null;while(games.length<5){const a=draw(false);if(ok(a,false)){keys.add(a.join(','));games.push(a);}}}
+  const why=BOT_MODE_NAME[mode]+(mode!=='uniform'?` (${base==='all'?'전체':'최근 '+base+'회'} 기준 · 강도 ${str})`:'')+(pats.length?' · 패턴: '+pats.map(id=>RULES[id].name).join(' + '):'')+(odd!=null?` · 홀${odd}:짝${6-odd}`:'');
+  const res={games,why};botCache.set(ck,res);return res;
+}
+function botPeople(){const out=[];
+  for(let b=1;b<=BOT_N;b++)for(let r=BOT_START;r<=NEXT;r++){const x=botRound(b,r);x.games.forEach((n,slot)=>out.push({uid:'bot'+b,nick:BOT_NAME+b,r,slot,n,bot:true,why:x.why}));}
+  return out;}
 let people=null,personSel='';
 async function loadSiteStats(){
   const el=$('#siteStats');
   try{
     const [a,b]=await Promise.all([sbRpc('round_stats',{p_round:LAST.no,p_win:LAST.n,p_bonus:LAST.b}),sbRpc('round_stats',{p_round:NEXT,p_win:[0],p_bonus:0})]);
     const P=[0,1/TOTAL,6/TOTAL,228/TOTAL,11115/TOTAL,182780/TOTAL];
-    const lose=a.total-a.r1-a.r2-a.r3-a.r4-a.r5;
+    let cmp='';
+    if(LAST.no>=BOT_START){let bg=0,bw=0;for(let i=1;i<=BOT_N;i++)botRound(i,LAST.no).games.forEach(g=>{bg++;if(rankOf(g,LAST))bw++;});
+      const hw=a.r1+a.r2+a.r3+a.r4+a.r5,rate=(w,t)=>t?`${fmt(w)}게임 당첨 (${pct(w/t,1)})`:'번호 없음';
+      cmp=`<div class="note" style="display:grid;gap:4px"><div><b>사람이 고른 번호</b> ${fmt(a.total)}게임 → ${rate(hw,a.total)}</div><div><b>무작위봇 ${BOT_N}개</b> ${fmt(bg)}게임 → ${rate(bw,bg)}</div><div class="mini">아무렇게나 뽑아도 5등 이상은 1게임당 약 2.4% 확률이에요.</div></div>`;}
     const cell=(k,v)=>`<div class="cell"><span class="k">${k}</span><span class="v${v&&k!=='낙첨'?' hl':''}">${fmt(v)}</span><span class="d">${k==='낙첨'?'':(w=>w!=null?`전국 ${fmt(w)}게임 중 ${fmt(v)}게임`:'전국 당첨 수 집계 전')(LAST.w?LAST.w[+k[0]-1]:null)}</span></div>`;
     el.innerHTML=`<div class="stack" style="gap:10px">
       <div class="row" style="justify-content:space-between"><b>${LAST.no}회 · 이 사이트에서 뽑은 번호 ${fmt(a.total)}게임 (${fmt(a.people)}명)</b><span class="balls">${LAST.n.map(n=>ball(n,'xs')).join('')}<span class="plus">+</span>${ball(LAST.b,'xs')}</span></div>
       ${a.total?`<div class="vs" style="grid-template-columns:repeat(auto-fit,minmax(min(100%,110px),1fr));gap:8px">${cell('1등',a.r1)}${cell('2등',a.r2)}${cell('3등',a.r3)}${cell('4등',a.r4)}${cell('5등',a.r5)}</div>`:`<div class="note">${LAST.no}회에는 이 사이트에서 모인 번호가 없어요.</div>`}
-      <div class="mini">${NEXT}회는 지금까지 ${fmt(b.total)}게임(${fmt(b.people)}명)이 모였어요. 닉네임을 정하지 않은 번호도 익명으로 이 통계에 들어가요.</div>
+      ${cmp}
+      <div class="mini">${NEXT}회는 지금까지 ${fmt(b.total)}게임(${fmt(b.people)}명)이 모였어요. 닉네임을 정하지 않은 번호도 익명으로 이 통계에 들어가요. 무작위봇은 사이트가 매 회차 자동으로 뽑는 비교용 봇이라 사람 통계에는 들어가지 않아요.</div>
     </div>`;
   }catch(e){el.innerHTML='';}
 }
@@ -1196,7 +1237,7 @@ async function loadPeople(force){
   if(people&&!force){drawPeople();return;}
   msg.innerHTML=`<div class="mini">불러오는 중…</div>`;loadSiteStats();
   try{const rows=await sbGet(`shared_picks?select=uid,nickname,round,slot,numbers&order=round.desc,slot.asc&limit=10000`);
-    people=rows.map(p=>({uid:p.uid,nick:p.nickname,r:p.round,slot:p.slot,n:p.numbers}));msg.innerHTML='';drawPeople();
+    people=rows.map(p=>({uid:p.uid,nick:p.nickname,r:p.round,slot:p.slot,n:p.numbers})).concat(botPeople());msg.innerHTML='';drawPeople();
   }catch(e){msg.innerHTML=`<div class="err">${esc(e.message)}. 잠시 뒤 새로고침해 주세요.</div>`;}
 }
 function drawPeople(){
@@ -1204,9 +1245,9 @@ function drawPeople(){
   const q=$('#peopleQ').value.trim();const by=new Map();
   people.forEach(p=>{if(!by.has(p.uid))by.set(p.uid,[]);by.get(p.uid).push(p);});
   const stat=[...by.entries()].map(([uid,l])=>{const k=l[0].nick;const done=l.filter(p=>D[p.r-1]);const rc=[0,0,0,0,0,0];done.forEach(p=>rc[rankOf(p.n,D[p.r-1])]++);
-    return {uid,k,games:done.length,won:done.length-rc[0],best:[1,2,3,4,5].find(x=>rc[x])||0,rc,now:l.filter(p=>p.r===NEXT).length};})
+    return {uid,k,bot:!!l[0].bot,games:done.length,won:done.length-rc[0],best:[1,2,3,4,5].find(x=>rc[x])||0,rc,now:l.filter(p=>p.r===NEXT).length};})
    .filter(s=>!q||s.k.includes(q)).sort((a,b)=>b.won-a.won||(a.best||9)-(b.best||9)||b.games-a.games||a.k.localeCompare(b.k));
-  $('#peopleTbl').innerHTML=stat.length?`<tr><th>닉네임</th><th class="r">추첨된 게임</th><th class="r">당첨</th><th>최고 등수</th><th class="r">${NEXT}회</th></tr>`+stat.map(s=>`<tr class="click" data-uid="${s.uid}"${s.uid===personSel?' style="background:var(--panel-2)"':''}><td><b>${esc(s.k)}</b>${s.uid===myUid?' <span class="tag">나</span>':''}</td><td class="r num">${s.games}</td><td class="r num">${s.won}</td><td>${s.best?`<span class="tag hot">${s.best}등</span>`:'-'}</td><td class="r num">${s.now?s.now+'게임':'-'}</td></tr>`).join(''):`<tr><td class="empty">${q?'찾는 닉네임이 없어요.':'아직 공유한 사람이 없어요. 히스토리 탭에서 닉네임을 정하면 첫 번째로 올라가요.'}</td></tr>`;
+  $('#peopleTbl').innerHTML=stat.length?`<tr><th>닉네임</th><th class="r">추첨된 게임</th><th class="r">당첨</th><th>최고 등수</th><th class="r">${NEXT}회</th></tr>`+stat.map(s=>`<tr class="click" data-uid="${s.uid}"${s.uid===personSel?' style="background:var(--panel-2)"':''}><td><b>${esc(s.k)}</b>${s.bot?' <span class="tag" title="매 회차 뽑는 방식·패턴을 무작위로 정해 5게임 뽑는 비교용 봇">봇</span>':''}${s.uid===myUid?' <span class="tag">나</span>':''}</td><td class="r num">${s.games}</td><td class="r num">${s.won}</td><td>${s.best?`<span class="tag hot">${s.best}등</span>`:'-'}</td><td class="r num">${s.now?s.now+'게임':'-'}</td></tr>`).join(''):`<tr><td class="empty">${q?'찾는 닉네임이 없어요.':'아직 공유한 사람이 없어요. 히스토리 탭에서 닉네임을 정하면 첫 번째로 올라가요.'}</td></tr>`;
   if(personSel&&by.has(personSel))showPerson(by.get(personSel)[0].nick,by.get(personSel));else $('#personPanel').hidden=true;
 }
 function showPerson(k,list){const done=list.filter(p=>D[p.r-1]);const rc=[0,0,0,0,0,0];done.forEach(p=>rc[rankOf(p.n,D[p.r-1])]++);
