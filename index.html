@@ -829,22 +829,27 @@ seg($('#consecSel'),[['any','상관없음'],['yes','꼭 포함'],['no','없게']
 $('#sMin').value=G.sMin;$('#sMax').value=G.sMax;
 $('#sMin').oninput=e=>{G.sMin=e.target.value;saveG();updateCoverage();};
 $('#sMax').oninput=e=>{G.sMax=e.target.value;saveG();updateCoverage();};
+['sMin','sMax'].forEach(id=>$('#'+id).addEventListener('change',e=>{const v=e.target.value;if(v!==''&&sumVal(v,null)===null){e.target.value='';G[id]='';saveG();updateCoverage();}}));
+if(G.sMin!==''&&sumVal(G.sMin,null)===null){G.sMin='';$('#sMin').value='';saveG();}
+if(G.sMax!==''&&sumVal(G.sMax,null)===null){G.sMax='';$('#sMax').value='';saveG();}
 [['avoidPat','usePat'],['exWon','exWon'],['exLast','exLast']].forEach(([id,k])=>{$('#'+id).checked=G[k];$('#'+id).onchange=e=>{G[k]=e.target.checked;saveG();updateCoverage();};});
 
-function makeCheck(forPast){
+function sumVal(v,d){const x=parseInt(v,10);return Number.isFinite(x)&&x>=21&&x<=255?x:d;}
+function makeCheck(forPast,skip){
+  skip=skip||{};
   const sel=selMask();
-  const oddOK=new Array(7).fill(false);G.odd.forEach(k=>oddOK[k]=true);
-  const sMin=G.sMin===''?21:+G.sMin, sMax=G.sMax===''?255:+G.sMax;
-  const k=G.mK,op=G.mOp,mn=G.mN;
+  const oddOK=new Array(7).fill(skip.odd);G.odd.forEach(k=>oddOK[k]=true);
+  let sMin=sumVal(G.sMin,21), sMax=sumVal(G.sMax,255);if(sMin>sMax)[sMin,sMax]=[sMax,sMin];if(skip.sum){sMin=21;sMax=255;}
+  const k=G.mK,op=skip.mul?'any':G.mOp,mn=G.mN;
   return a=>{
     let odd=0,s=0,run=1,maxRun=1,mc=0;const dc=[0,0,0,0,0];
     for(let i=0;i<6;i++){const n=a[i];odd+=n&1;s+=n;dc[n<10?0:n>=40?4:Math.floor(n/10)]++;if(n%k===0)mc++;if(i&&n===a[i-1]+1){run++;if(run>maxRun)maxRun=run;}else if(i)run=1;}
     if(!oddOK[odd])return false;
-    for(let i=0;i<5;i++)if(G.dec[i]>=0&&dc[i]!==G.dec[i])return false;
-    if(G.consec==='yes'&&maxRun<2)return false; if(G.consec==='no'&&maxRun>=2)return false;
+    if(!skip.dec)for(let i=0;i<5;i++)if(G.dec[i]>=0&&dc[i]!==G.dec[i])return false;
+    if(!skip.consec&&G.consec==='yes'&&maxRun<2)return false; if(!skip.consec&&G.consec==='no'&&maxRun>=2)return false;
     if(op==='eq'&&mc!==mn)return false; if(op==='ge'&&mc<mn)return false; if(op==='le'&&mc>mn)return false; if(op==='all'&&mc!==6)return false;
     if(s<sMin||s>sMax)return false;
-    if(G.usePat&&sel&&!hasPat(maskOf(a).m,sel))return false;
+    if(!skip.pat&&G.usePat&&sel&&!hasPat(maskOf(a).m,sel))return false;
     if(!forPast&&G.exWon&&WON.has(a.join(',')))return false;
     return true;
   };
@@ -876,7 +881,7 @@ function computeCoverage(){
   const incSet=new Set(inc);const exc=new Set();for(let n=1;n<=45;n++)if(G.marks[n]===2||lastSet.has(n))exc.add(n);
   const past=D.filter(d=>inc.every(x=>d.n.includes(x))&&!d.n.some(x=>exc.has(x))&&chkP(d.n)).length;
   const estTxt=ok===0?'매우 적음(추정 불가)':(est>=1e4?'약 '+fmt(Math.round(est/1000)*1000):'약 '+fmt(Math.round(est)))+'개';
-  el.innerHTML=`조건에 맞는 조합 <b>${estTxt}</b> · 전체의 <b>${pct(est/TOTAL,2)}</b><br>과거 ${fmt(N)}회 중 이 조건에 맞은 회차 <b>${past}회</b> (${pct(past/N,1)})`;
+  el.innerHTML=`조건에 맞는 조합 <b>${estTxt}</b> · 전체의 <b>${pct(est/TOTAL,2)}</b><br>과거 ${fmt(N)}회 중 이 조건에 맞은 회차 <b>${past}회</b> (${pct(past/N,1)})`+(ok===0?`<br><span style="color:var(--slip-ink)">${blockers(inc,pool,r)}</span>`:'');
 }
 function weights(){
   if(G.mode==='uniform')return null;
@@ -920,11 +925,16 @@ function generate(){
   const {inc,pool,r}=poolInfo();
   if(pool.length<r){msg.innerHTML=`<div class="err">제외한 번호가 너무 많아 6개를 채울 수 없어요. 제외를 몇 개 풀어 주세요.</div>`;return;}
   const chk=makeCheck(false);const w=weights();const res=[];const seen=new Set(curIdx().map(i=>saved[i].n.join(',')));let tries=0;const LIM=400000;
-  while(res.length<rem&&tries<LIM){tries++;const a=inc.concat(sampleFrom(pool,r,w)).sort((x,y)=>x-y);const k=a.join(',');if(seen.has(k)||!chk(a))continue;seen.add(k);res.push(a);}
-  if(!res.length){msg.innerHTML=`<div class="err">조건을 모두 만족하는 조합을 찾지 못했어요. 번호대 개수, 합계 범위, 배수 조건 중 하나를 넓혀 보세요.</div>`;return;}
+  while(res.length<rem&&tries<LIM){tries++;const a=inc.concat(sampleFrom(pool,r,w&&tries<LIM/2?w:null)).sort((x,y)=>x-y);const k=a.join(',');if(seen.has(k)||!chk(a))continue;seen.add(k);res.push(a);}
+  if(!res.length){msg.innerHTML=`<div class="err">조건을 모두 만족하는 조합을 찾지 못했어요. ${blockers(inc,pool,r)}</div>`;return;}
   if(res.length<rem)msg.innerHTML=`<div class="err">조건이 좁아서 ${res.length}게임만 찾았어요.</div>`;
   freshKeys=new Set(res.map(a=>a.join(',')));
   const used=new Set(curIdx().map(i=>saved[i].slot));const free=[0,1,2,3,4].filter(x=>!used.has(x));const filled=new Set(free.slice(0,res.length));saved=saved.filter(x=>!(x.r===LAST.no&&filled.has(x.slot)));res.forEach((a,j)=>saved.push({n:a,r:NEXT,slot:free[j],t:Date.now()}));store.set('saved',saved);renderSaved();
+}
+function blockers(inc,pool,r){
+  const opts=[['sum','합계 범위'],['mul','배수 조건'],['dec','번호대 개수'],['odd','홀짝 비율'],['consec','연속 번호'],['pat','선택한 패턴']];
+  const found=opts.filter(([key])=>{const chk=makeCheck(false,{[key]:true});for(let i=0;i<60000;i++){if(chk(inc.concat(sampleFrom(pool,r,null)).sort((x,y)=>x-y)))return true;}return false;}).map(o=>o[1]);
+  return found.length?`<b>${found.join(' 또는 ')}</b> 때문이에요. 이걸 풀거나 넓혀 보세요.`:'고정·제외 번호나 여러 조건이 함께 너무 좁아요. 몇 가지를 풀어 보세요.';
 }
 $('#genBtn').onclick=generate;
 $('#saveAll').onclick=()=>saveAll();
