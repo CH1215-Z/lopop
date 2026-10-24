@@ -209,6 +209,7 @@ a.btn{text-decoration:none;display:inline-block}
 .ok-box b{color:var(--ink)}
 .nudge-pop{position:fixed;left:50%;top:calc(env(safe-area-inset-top,0px) + 90px);transform:translateX(-50%);z-index:62;width:min(400px,calc(100vw - 32px));box-shadow:0 18px 50px rgba(0,0,0,.2);flex-direction:column;align-items:stretch!important;animation:cg-in .4s cubic-bezier(.2,1.4,.4,1) both}
 .nudge.nudge-pop .nudge-t{flex:none}
+.round-chips{display:flex;gap:6px;overflow-x:auto;padding-bottom:4px}.round-chips .chip{flex:none}
 .prev-wrap{margin-top:16px;padding-top:12px;border-top:2px solid var(--line)}
 .prev-toggle{all:unset;box-sizing:border-box;cursor:pointer;display:flex;justify-content:space-between;align-items:center;width:100%;padding:6px 0;font-size:15px}
 .prev-card{border:1px solid var(--line);border-radius:12px;padding:10px 12px;margin-bottom:8px}
@@ -514,18 +515,22 @@ footer{color:var(--faint);font-size:12.5px;padding-block:0 30px}
 <section class="wrap" data-view="people" hidden>
   <div class="panel stack">
     <div>
-      <h2>모두의 히스토리</h2>
-      <p class="lead">닉네임으로 공유한 사람들의 번호와 당첨 결과예요. 닉네임을 누르면 그 사람의 회차별 기록이 보여요.</p>
+      <h2>모두의 히스토리 <small id="curRoundSub"></small></h2>
+      <p class="lead">이번 회차에 번호를 저장한 사람들이에요. 닉네임을 누르면 번호가 보여요. 추첨이 끝나면 아래 '지난 회차'로 넘어가요.</p>
     </div>
-    <div id="siteStats"></div>
+    <div id="curStats"></div>
     <div id="peopleMsg"></div>
     <div class="row"><input type="text" id="peopleQ" placeholder="닉네임 찾기" aria-label="닉네임 찾기" style="flex:1 1 200px;min-width:0"><button class="btn ghost" id="peopleReload">새로고침</button></div>
     <div class="tbl-wrap"><table id="peopleTbl"></table></div>
   </div>
-  <div class="panel stack" id="personPanel" hidden>
-    <h2 id="personName"></h2>
-    <div id="personSum"></div>
-    <div id="personOut"></div>
+  <div class="panel stack" id="pastPanel">
+    <div>
+      <h2>지난 회차</h2>
+      <p class="lead">회차를 고르면 그 회차에 이 사이트에서 뽑은 번호의 결과와 순위가 나와요. 닉네임은 그 회차 때 이름으로 보여요.</p>
+    </div>
+    <div class="round-chips" id="pastRounds"></div>
+    <div id="siteStats"></div>
+    <div class="tbl-wrap"><table id="pastTbl"></table></div>
   </div>
 </section>
 
@@ -1235,49 +1240,75 @@ function botPeople(){const out=[];
   for(let b=1;b<=BOT_N;b++)for(let r=BOT_START;r<=NEXT;r++){const x=botRound(b,r);x.games.forEach((n,slot)=>out.push({uid:'bot'+b,nick:BOT_NAME+b,r,slot,n,bot:true,why:x.why}));}
   return out;}
 let people=null,personSel='';
-async function loadSiteStats(){
-  const el=$('#siteStats');
+let pastSel=0,pastPick='';
+async function loadSiteStats(r){
+  const el=$('#siteStats');const d=D[r-1];if(!d){el.innerHTML='';return;}
+  el.innerHTML='<div class="mini">불러오는 중…</div>';
   try{
-    const [a,b]=await Promise.all([sbRpc('round_stats',{p_round:LAST.no,p_win:LAST.n,p_bonus:LAST.b}),sbRpc('round_stats',{p_round:NEXT,p_win:[0],p_bonus:0})]);
-    const P=[0,1/TOTAL,6/TOTAL,228/TOTAL,11115/TOTAL,182780/TOTAL];
+    const a=await sbRpc('round_stats',{p_round:r,p_win:d.n,p_bonus:d.b});if(pastSel!==r)return;
     let cmp='';
-    if(LAST.no>=BOT_START){let bg=0,bw=0;for(let i=1;i<=BOT_N;i++)botRound(i,LAST.no).games.forEach(g=>{bg++;if(rankOf(g,LAST))bw++;});
+    if(r>=BOT_START){let bg=0,bw=0;for(let i=1;i<=BOT_N;i++)botRound(i,r).games.forEach(g=>{bg++;if(rankOf(g,d))bw++;});
       const hw=a.r1+a.r2+a.r3+a.r4+a.r5,rate=(w,t)=>t?`${fmt(w)}게임 당첨 (${pct(w/t,1)})`:'번호 없음';
       cmp=`<div class="note" style="display:grid;gap:4px"><div><b>사람이 고른 번호</b> ${fmt(a.total)}게임 → ${rate(hw,a.total)}</div><div><b>무작위봇 ${BOT_N}개</b> ${fmt(bg)}게임 → ${rate(bw,bg)}</div><div class="mini">아무렇게나 뽑아도 5등 이상은 1게임당 약 2.4% 확률이에요.</div></div>`;}
-    const cell=(k,v)=>`<div class="cell"><span class="k">${k}</span><span class="v${v&&k!=='낙첨'?' hl':''}">${fmt(v)}</span><span class="d">${k==='낙첨'?'':(w=>w!=null?`전국 ${fmt(w)}게임 중 ${fmt(v)}게임`:'전국 당첨 수 집계 전')(LAST.w?LAST.w[+k[0]-1]:null)}</span></div>`;
+    const cell=(k,v)=>`<div class="cell"><span class="k">${k}</span><span class="v${v?' hl':''}">${fmt(v)}</span><span class="d">${(w=>w!=null?`전국 ${fmt(w)}게임 중 ${fmt(v)}게임`:'전국 당첨 수 집계 전')(d.w?d.w[+k[0]-1]:null)}</span></div>`;
     el.innerHTML=`<div class="stack" style="gap:10px">
-      <div class="row" style="justify-content:space-between"><b>${LAST.no}회 · 이 사이트에서 뽑은 번호 ${fmt(a.total)}게임 (${fmt(a.people)}명)</b><span class="balls">${LAST.n.map(n=>ball(n,'xs')).join('')}<span class="plus">+</span>${ball(LAST.b,'xs')}</span></div>
-      ${a.total?`<div class="vs" style="grid-template-columns:repeat(auto-fit,minmax(min(100%,110px),1fr));gap:8px">${cell('1등',a.r1)}${cell('2등',a.r2)}${cell('3등',a.r3)}${cell('4등',a.r4)}${cell('5등',a.r5)}</div>`:`<div class="note">${LAST.no}회에는 이 사이트에서 모인 번호가 없어요.</div>`}
+      <div class="row" style="justify-content:space-between"><b>${r}회 · 이 사이트에서 뽑은 번호 ${fmt(a.total)}게임 (${fmt(a.people)}명)</b><span class="balls">${d.n.map(n=>ball(n,'xs')).join('')}<span class="plus">+</span>${ball(d.b,'xs')}</span></div>
+      ${a.total?`<div class="vs" style="grid-template-columns:repeat(auto-fit,minmax(min(100%,110px),1fr));gap:8px">${cell('1등',a.r1)}${cell('2등',a.r2)}${cell('3등',a.r3)}${cell('4등',a.r4)}${cell('5등',a.r5)}</div>`:`<div class="note">${r}회에는 이 사이트에서 모인 번호가 없어요.</div>`}
       ${cmp}
-      <div class="mini">${NEXT}회는 지금까지 ${fmt(b.total)}게임(${fmt(b.people)}명)이 모였어요. 닉네임을 정하지 않은 번호도 익명으로 이 통계에 들어가요. 무작위봇은 사이트가 매 회차 자동으로 뽑는 비교용 봇이라 사람 통계에는 들어가지 않아요.</div>
+      <div class="mini">닉네임을 정하지 않은 번호도 익명으로 이 통계에 들어가요. 무작위봇은 사이트가 매 회차 자동으로 뽑는 비교용 봇이라 사람 통계에는 들어가지 않아요.</div>
     </div>`;
   }catch(e){el.innerHTML='';}
 }
+async function loadCurStats(){
+  try{const b=await sbRpc('round_stats',{p_round:NEXT,p_win:[0],p_bonus:0});
+    $('#curStats').innerHTML=`<div class="note">${NEXT}회에 지금까지 <b>${fmt(b.total)}게임</b>(${fmt(b.people)}명)이 모였어요. 판매 마감 ${nextDate()} 토 20:00</div>`;}catch(e){$('#curStats').innerHTML='';}
+}
 async function loadPeople(force){
-  const msg=$('#peopleMsg');
+  const msg=$('#peopleMsg');$('#curRoundSub').textContent=`${NEXT}회`;
   if(!SB_ON){msg.innerHTML=`<div class="note">공유 기능은 아직 준비 중이에요.</div>`;return;}
-  if(people&&!force){drawPeople();return;}
-  msg.innerHTML=`<div class="mini">불러오는 중…</div>`;loadSiteStats();
+  if(people&&!force){drawPeople();drawPast();return;}
+  msg.innerHTML=`<div class="mini">불러오는 중…</div>`;loadCurStats();
   try{const rows=await sbGet(`shared_picks?select=uid,nickname,round,slot,numbers&order=round.desc,slot.asc&limit=10000`);
-    people=rows.map(p=>({uid:p.uid,nick:p.nickname,r:p.round,slot:p.slot,n:p.numbers})).concat(botPeople());msg.innerHTML='';drawPeople();
+    people=rows.map(p=>({uid:p.uid,nick:p.nickname,r:p.round,slot:p.slot,n:p.numbers})).concat(botPeople());msg.innerHTML='';drawPeople();drawPast();
   }catch(e){msg.innerHTML=`<div class="err">${esc(e.message)}. 잠시 뒤 새로고침해 주세요.</div>`;}
 }
+const botTag=b=>b?' <span class="tag" title="매 회차 뽑는 방식·패턴을 무작위로 정해 5게임 뽑는 비교용 봇">봇</span>':'';
+function gameRows(list,d){return list.sort((a,b)=>a.slot-b.slot).map(h=>{const L=`<span class="gl">${h.slot+1}</span>`;
+  if(!d)return `<div class="row" style="gap:8px">${L}${balls(h.n,'sm')}</div>`;
+  const k=rankOf(h.n,d),m=h.n.filter(x=>d.n.includes(x)).length;
+  return `<div class="row" style="gap:8px">${L}<span class="balls">${h.n.map(n=>`<span class="ball sm b${band(n)}"${d.n.includes(n)||(k===2&&n===d.b)?'':' style="opacity:.28"'}>${n}</span>`).join('')}</span>${k?`<span class="tag hot">${k}등 당첨</span>`:`<span class="tag">${m}개 일치</span>`}</div>`;}).join('');}
 function drawPeople(){
   if(!people)return;
   const q=$('#peopleQ').value.trim();const by=new Map();
-  people.forEach(p=>{if(!by.has(p.uid))by.set(p.uid,[]);by.get(p.uid).push(p);});
-  const stat=[...by.entries()].map(([uid,l])=>{const k=l[0].nick;const done=l.filter(p=>D[p.r-1]);const rc=[0,0,0,0,0,0];done.forEach(p=>rc[rankOf(p.n,D[p.r-1])]++);
-    return {uid,k,bot:!!l[0].bot,games:done.length,won:done.length-rc[0],best:[1,2,3,4,5].find(x=>rc[x])||0,rc,now:l.filter(p=>p.r===NEXT).length};})
-   .filter(s=>!q||s.k.includes(q)).sort((a,b)=>b.won-a.won||(a.best||9)-(b.best||9)||b.games-a.games||a.k.localeCompare(b.k));
-  $('#peopleTbl').innerHTML=stat.length?`<tr><th>닉네임</th><th class="r">추첨된 게임</th><th class="r">당첨</th><th>최고 등수</th><th class="r">${NEXT}회</th></tr>`+stat.map(s=>`<tr class="click" data-uid="${s.uid}"${s.uid===personSel?' style="background:var(--panel-2)"':''}><td><b>${esc(s.k)}</b>${s.bot?' <span class="tag" title="매 회차 뽑는 방식·패턴을 무작위로 정해 5게임 뽑는 비교용 봇">봇</span>':''}${s.uid===myUid?' <span class="tag">나</span>':''}</td><td class="r num">${s.games}</td><td class="r num">${s.won}</td><td>${s.best?`<span class="tag hot">${s.best}등</span>`:'-'}</td><td class="r num">${s.now?s.now+'게임':'-'}</td></tr>`).join(''):`<tr><td class="empty">${q?'찾는 닉네임이 없어요.':'아직 공유한 사람이 없어요. 히스토리 탭에서 닉네임을 정하면 첫 번째로 올라가요.'}</td></tr>`;
-  if(personSel&&by.has(personSel))showPerson(by.get(personSel)[0].nick,by.get(personSel));else $('#personPanel').hidden=true;
+  people.filter(p=>p.r===NEXT).forEach(p=>{if(!by.has(p.uid))by.set(p.uid,[]);by.get(p.uid).push(p);});
+  const rec=uid=>{const done=people.filter(p=>p.uid===uid&&D[p.r-1]);return {g:done.length,w:done.filter(p=>rankOf(p.n,D[p.r-1])).length};};
+  const stat=[...by.entries()].map(([uid,l])=>({uid,k:l[0].nick,bot:!!l[0].bot,l,...rec(uid)}))
+    .filter(s=>!q||s.k.includes(q)).sort((a,b)=>(b.uid===myUid)-(a.uid===myUid)||a.bot-b.bot||b.l.length-a.l.length||a.k.localeCompare(b.k));
+  $('#peopleTbl').innerHTML=stat.length?`<tr><th>닉네임</th><th class="r">${NEXT}회</th><th class="r">지난 기록</th></tr>`+stat.map(s=>{
+    const open=s.uid===personSel;
+    return `<tr class="click" data-uid="${s.uid}"${open?' style="background:var(--panel-2)"':''}><td><b>${esc(s.k)}</b>${botTag(s.bot)}${s.uid===myUid?' <span class="tag">나</span>':''}</td><td class="r num">${s.l.length}게임</td><td class="r num">${s.g?`${s.w}/${s.g}게임 당첨`:'-'}</td></tr>`+
+      (open?`<tr><td colspan="3" style="padding:8px 4px 14px;white-space:normal"><div class="stack" style="gap:6px">${s.l[0].why?`<div class="mini">이번 회차 방식: ${esc(s.l[0].why)}</div>`:''}${gameRows(s.l.slice(),null)}</div></td></tr>`:'');}).join('')
+    :`<tr><td class="empty">${q?'찾는 닉네임이 없어요.':`아직 ${NEXT}회 번호를 공유한 사람이 없어요. 히스토리 탭에서 닉네임을 정하고 번호를 저장하면 첫 번째로 올라가요.`}</td></tr>`;
 }
-function showPerson(k,list){const done=list.filter(p=>D[p.r-1]);const rc=[0,0,0,0,0,0];done.forEach(p=>rc[rankOf(p.n,D[p.r-1])]++);
-  $('#personPanel').hidden=false;$('#personName').textContent=`${k}님의 히스토리`;
-  $('#personSum').innerHTML=`<div class="note">추첨된 게임 <b>${done.length}</b> · 당첨 <b>${done.length-rc[0]}</b>${[1,2,3,4,5].filter(x=>rc[x]).map(x=>` · ${x}등 ${rc[x]}`).join('')}</div>`;
-  $('#personOut').innerHTML=roundsHTML(list);
+function drawPast(){
+  if(!people)return;
+  const rounds=[...new Set(people.filter(p=>D[p.r-1]).map(p=>p.r))].sort((a,b)=>b-a);
+  if(!rounds.length){$('#pastPanel').hidden=true;return;}
+  $('#pastPanel').hidden=false;
+  if(!rounds.includes(pastSel)){pastSel=rounds[0];loadSiteStats(pastSel);}
+  $('#pastRounds').innerHTML=rounds.map(r=>`<button type="button" class="chip" data-pr="${r}" aria-pressed="${r===pastSel}">${r}회<span class="pct">${dateK(D[r-1].date).slice(5)}</span></button>`).join('');
+  const d=D[pastSel-1];const by=new Map();
+  people.filter(p=>p.r===pastSel).forEach(p=>{if(!by.has(p.uid))by.set(p.uid,[]);by.get(p.uid).push(p);});
+  const stat=[...by.entries()].map(([uid,l])=>{const rk=l.map(p=>rankOf(p.n,d));const best=Math.min(...rk.map(k=>k||9));
+    return {uid,k:l[0].nick,bot:!!l[0].bot,l,best:best===9?0:best,won:rk.filter(Boolean).length,mm:Math.max(...l.map(p=>p.n.filter(x=>d.n.includes(x)).length))};})
+    .sort((a,b)=>(a.best||9)-(b.best||9)||b.won-a.won||b.mm-a.mm||a.k.localeCompare(b.k));
+  $('#pastTbl').innerHTML=`<tr><th class="r">순위</th><th>닉네임 (그 회차)</th><th class="r">게임</th><th>결과</th></tr>`+stat.map((s,i)=>{const open=s.uid===pastPick;
+    return `<tr class="click" data-puid="${s.uid}"${open?' style="background:var(--panel-2)"':''}><td class="r num">${i+1}</td><td><b>${esc(s.k)}</b>${botTag(s.bot)}${s.uid===myUid?' <span class="tag">나</span>':''}</td><td class="r num">${s.l.length}</td><td>${s.best?`<span class="tag hot">${s.best}등${s.won>1?` 외 ${s.won-1}`:''}</span>`:`<span class="tag">최대 ${s.mm}개 일치</span>`}</td></tr>`+
+      (open?`<tr><td colspan="4" style="padding:8px 4px 14px;white-space:normal"><div class="stack" style="gap:6px">${s.l[0].why?`<div class="mini">이 회차 방식: ${esc(s.l[0].why)}</div>`:''}${gameRows(s.l.slice(),d)}</div></td></tr>`:'');}).join('');
 }
-$('#peopleTbl').onclick=e=>{const r=e.target.closest('tr[data-uid]');if(!r)return;personSel=r.dataset.uid;if(people)drawPeople();else{loadPeople(true);return;}$('#personPanel').scrollIntoView({behavior:'smooth',block:'start'});};
+$('#peopleTbl').onclick=e=>{const r=e.target.closest('tr[data-uid]');if(!r)return;personSel=personSel===r.dataset.uid?'':r.dataset.uid;drawPeople();};
+$('#pastRounds').onclick=e=>{const b=e.target.closest('[data-pr]');if(!b)return;pastSel=+b.dataset.pr;pastPick='';loadSiteStats(pastSel);drawPast();};
+$('#pastTbl').onclick=e=>{const r=e.target.closest('tr[data-puid]');if(!r)return;pastPick=pastPick===r.dataset.puid?'':r.dataset.puid;drawPast();};
 $('#peopleQ').oninput=()=>{if(people)drawPeople();};
 $('#peopleReload').onclick=()=>loadPeople(true);
 if(SB_ON)syncShared();
